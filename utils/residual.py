@@ -9,6 +9,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
+from torch_geometric.typing import SparseTensor
 
 
 class ResidualGNNLayer(nn.Module):
@@ -267,6 +268,3 @@ class ResidualGNNWrapper(nn.Module):
             f"  use_residual={self.use_residual}\n"
             f")"
         )
-
-
-from torch_geometric.typing import SparseTensor
