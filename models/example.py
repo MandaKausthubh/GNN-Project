@@ -7,7 +7,7 @@ import os
 
 import torch
 from gnn_datasets import AmazonPhotos, EmailEuCore, DBLP
-from models import GCNWrapper, GATWrapper
+from models import GCNWrapper, GATWrapper, SAGEWrapper
 
 
 def train_epoch(model, data, optimizer, criterion):
@@ -48,7 +48,7 @@ def main():
     parser.add_argument(
         "--model",
         type=str,
-        choices=["gcn", "gat"],
+        choices=["gcn", "gat", "sage"],
         default="gcn",
         help="Model to use (default: gcn)",
     )
@@ -121,6 +121,14 @@ def main():
         )
     elif args.model == "gat":
         model = GATWrapper(
+            in_channels=in_channels,
+            hidden_channels=args.hidden_channels,
+            num_layers=args.num_layers,
+            out_channels=num_classes,
+            dropout=args.dropout,
+        )
+    elif args.model == "sage":
+        model = SAGEWrapper(
             in_channels=in_channels,
             hidden_channels=args.hidden_channels,
             num_layers=args.num_layers,

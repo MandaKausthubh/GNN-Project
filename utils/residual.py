@@ -71,7 +71,8 @@ class ResidualGNNLayer(nn.Module):
         # Different conv layers accept different parameters:
         # - GCNConv: edge_weight
         # - GATConv: edge_attr (not edge_weight)
-        # - SAGEConv/GINConv: no edge weighting
+        # - SAGEConv: edge_weight
+        # - GINConv: no edge weighting
         conv_class_name = self.conv.__class__.__name__
         if conv_class_name == 'GCNConv':
             h = self.conv(x, edge_index, edge_weight=edge_weight)
@@ -80,6 +81,8 @@ class ResidualGNNLayer(nn.Module):
                 h = self.conv(x, edge_index, edge_attr=edge_attr)
             else:
                 h = self.conv(x, edge_index)
+        elif conv_class_name == 'SAGEConv':
+            h = self.conv(x, edge_index, edge_weight=edge_weight)
         else:
             h = self.conv(x, edge_index)
 
@@ -244,7 +247,8 @@ class ResidualGNNWrapper(nn.Module):
             # Different conv layers accept different parameters:
             # - GCNConv: edge_weight
             # - GATConv: edge_attr (not edge_weight)
-            # - SAGEConv/GINConv: no edge weighting
+            # - SAGEConv: edge_weight
+            # - GINConv: no edge weighting
             conv_class_name = conv.__class__.__name__
             if conv_class_name == 'GCNConv':
                 h = conv(x, edge_index, edge_weight=edge_weight)
@@ -253,6 +257,8 @@ class ResidualGNNWrapper(nn.Module):
                     h = conv(x, edge_index, edge_attr=edge_attr)
                 else:
                     h = conv(x, edge_index)
+            elif conv_class_name == 'SAGEConv':
+                h = conv(x, edge_index, edge_weight=edge_weight)
             else:
                 h = conv(x, edge_index)
 

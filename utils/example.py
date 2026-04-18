@@ -8,7 +8,7 @@ import os
 import torch
 import torch.nn as nn
 from gnn_datasets import AmazonPhotos, EmailEuCore, DBLP
-from models import GCNWrapper, GATWrapper
+from models import GCNWrapper, GATWrapper, SAGEWrapper
 from utils import Trainer, ResidualGNNWrapper
 
 
@@ -64,7 +64,7 @@ def main():
     parser.add_argument(
         "--model",
         type=str,
-        choices=["gcn", "gat", "residual_gcn", "residual_gat"],
+        choices=["gcn", "gat", "sage", "residual_gcn", "residual_gat", "residual_sage"],
         default="residual_gcn",
         help="Model type (default: residual_gcn)",
     )
@@ -202,7 +202,7 @@ def main():
     print(f"Features: {in_channels}, Classes: {num_classes}")
 
     # Create model
-    if args.model == "residual_gcn" or args.model == "residual_gat":
+    if args.model.startswith("residual_"):
         model = ResidualGNNWrapper(
             in_channels=in_channels,
             hidden_channels=args.hidden_channels,
@@ -225,6 +225,14 @@ def main():
         )
     elif args.model == "gat":
         model = GATWrapper(
+            in_channels=in_channels,
+            hidden_channels=args.hidden_channels,
+            num_layers=args.num_layers,
+            out_channels=num_classes,
+            dropout=args.dropout,
+        )
+    elif args.model == "sage":
+        model = SAGEWrapper(
             in_channels=in_channels,
             hidden_channels=args.hidden_channels,
             num_layers=args.num_layers,
