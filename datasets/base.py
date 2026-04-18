@@ -3,8 +3,10 @@ Base wrapper class for PyTorch Geometric datasets.
 Provides a common interface for all dataset wrappers.
 """
 
+import os
+import zipfile
 from abc import ABC, abstractmethod
-from typing import Optional, Callable, Any
+from typing import Optional, Callable, List
 
 import torch
 from torch_geometric.data import Data, Dataset
@@ -20,6 +22,12 @@ class BaseDatasetWrapper(Dataset, ABC):
 
     # The underlying PyG dataset class
     _pyg_dataset_cls: type = None
+
+    # URL for downloading the dataset (override in subclass)
+    url: Optional[str] = None
+
+    # List of raw file names to check for
+    _raw_file_names: List[str] = []
 
     def __init__(
         self,
@@ -95,12 +103,42 @@ class BaseDatasetWrapper(Dataset, ABC):
     @property
     def raw_file_names(self) -> list:
         """Raw file names."""
-        return self._dataset.raw_file_names
+        return self._raw_file_names
 
     @property
     def processed_file_names(self) -> list:
         """Processed file names."""
         return self._dataset.processed_file_names
+
+    def _download(self) -> None:
+        """
+        Download and extract the dataset if raw files are not found.
+
+        Downloads from self.url, extracts the zip file, and cleans up.
+        """
+        if self.url is None:
+            return
+
+        raw_dir = self.raw_dir
+        os.makedirs(raw_dir, exist_ok=True)
+
+        # Check if all raw files exist
+        if all(os.path.exists(os.path.join(raw_dir, f)) for f in self._raw_file_names):
+            return
+
+        import urllib.request
+
+        zip_path = os.path.join(raw_dir, "dataset.zip")
+
+        print(f"Downloading {self.url}...")
+        urllib.request.urlretrieve(self.url, zip_path)
+
+        print(f"Extracting {zip_path}...")
+        with zipfile.ZipFile(zip_path, "r") as zip_ref:
+            zip_ref.extractall(raw_dir)
+
+        os.remove(zip_path)
+        print("Download complete.")
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(root={self.root})"

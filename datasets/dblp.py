@@ -33,6 +33,10 @@ class DBLP(SingleGraphWrapper):
     """
 
     _pyg_dataset_cls = PyGDBLP
+    _raw_file_names = ["edges.txt", "node_labels.txt", "node_features.txt"]
+
+    # Using a reliable source for the DBLP dataset
+    url = "https://github.com/shwimal/GNN-Datasets/raw/refs/heads/main/DBLP.zip"
 
     def _get_data(self, idx: int):
         """Get graph data from underlying DBLP dataset."""

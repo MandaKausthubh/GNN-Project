@@ -33,6 +33,10 @@ class AmazonPhotos(SingleGraphWrapper):
     """
 
     _pyg_dataset_cls = PyGAmazon
+    _raw_file_names = ["edges.txt", "node_labels.txt", "node_features.txt"]
+
+    # Using a reliable source for the Amazon Photos dataset
+    url = "https://github.com/shwimal/GNN-Datasets/raw/refs/heads/main/AmazonPhotos.zip"
 
     def __init__(
         self,
@@ -42,7 +46,6 @@ class AmazonPhotos(SingleGraphWrapper):
         pre_filter: Optional[Callable] = None,
         force_reload: bool = False,
     ):
-        # Amazon dataset requires a name parameter
         super().__init__(
             root=root,
             transform=transform,

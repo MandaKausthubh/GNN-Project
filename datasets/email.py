@@ -33,6 +33,10 @@ class EmailEuCore(SingleGraphWrapper):
     """
 
     _pyg_dataset_cls = PyGEmailEUCore
+    _raw_file_names = ["email-Eu-core.txt", "email-Eu-core-department-labels.txt"]
+
+    # SNAP source for Email-Eu-Core
+    url = "https://snap.stanford.edu/data/email-Eu-core.zip"
 
     def _get_data(self, idx: int):
         """Get graph data from underlying EmailEUCore dataset."""
