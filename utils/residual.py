@@ -248,8 +248,8 @@ class ResidualGNNWrapper(nn.Module):
             if self.training:
                 h = F.dropout(h, p=self.dropout, training=True)
 
-            # Residual connection with alpha blending
-            if self.use_residual:
+            # Residual connection with alpha blending (only when dimensions match, i.e., not last layer)
+            if self.use_residual and i < self.num_layers - 1:
                 h = self.residual_alpha * h + (1 - self.residual_alpha) * identity
 
             # Activation (skip last layer)
