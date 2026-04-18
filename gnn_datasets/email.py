@@ -23,7 +23,6 @@ class EmailEuCore(SingleGraphWrapper):
         root: Root directory where data is stored.
         transform: Transform to apply to each graph.
         pre_transform: Transform to apply once before loading.
-        pre_filter: Filter to apply before returning graphs.
         force_reload: Force reload of cached data.
 
     Statistics:
@@ -33,10 +32,14 @@ class EmailEuCore(SingleGraphWrapper):
     """
 
     _pyg_dataset_cls = PyGEmailEUCore
-    _raw_file_names = ["email-Eu-core.txt", "email-Eu-core-department-labels.txt"]
 
-    # SNAP source for Email-Eu-Core
-    url = "https://snap.stanford.edu/data/email-Eu-core.zip"
+    def _init_pyg_dataset(self):
+        return self._pyg_dataset_cls(
+            root=self.root,
+            transform=self.transform,
+            pre_transform=self.pre_transform,
+            force_reload=self.force_reload,
+        )
 
     def _get_data(self, idx: int):
         """Get graph data from underlying EmailEUCore dataset."""

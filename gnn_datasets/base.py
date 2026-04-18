@@ -8,16 +8,14 @@ import zipfile
 from abc import ABC, abstractmethod
 from typing import Optional, Callable, List
 
-import torch
-from torch_geometric.data import Data, Dataset
+from torch_geometric.data import Data
 
 
-class BaseDatasetWrapper(Dataset, ABC):
+class BaseDatasetWrapper(ABC):
     """
     Abstract base wrapper for PyTorch Geometric datasets.
 
-    Provides common functionality while delegating core dataset
-    operations to the underlying PyG dataset.
+    Provides a common interface for dataset wrappers.
     """
 
     # The underlying PyG dataset class
@@ -34,7 +32,6 @@ class BaseDatasetWrapper(Dataset, ABC):
         root: Optional[str] = None,
         transform: Optional[Callable] = None,
         pre_transform: Optional[Callable] = None,
-        pre_filter: Optional[Callable] = None,
         force_reload: bool = False,
     ):
         """
@@ -44,25 +41,25 @@ class BaseDatasetWrapper(Dataset, ABC):
             root: Root directory where data is stored.
             transform: Transform to apply to each graph.
             pre_transform: Transform to apply once before loading.
-            pre_filter: Filter to apply before returning graphs.
             force_reload: Force reload of cached data.
         """
-        super().__init__(
-            root=root,
-            transform=transform,
-            pre_transform=pre_transform,
-            pre_filter=pre_filter,
-            force_reload=force_reload,
-        )
+        self.root = root
+        self.transform = transform
+        self.pre_transform = pre_transform
+        self.force_reload = force_reload
 
         # Initialize the underlying PyG dataset
-        self._dataset = self._pyg_dataset_cls(
-            root=root,
-            transform=transform,
-            pre_transform=pre_transform,
-            pre_filter=pre_filter,
-            force_reload=force_reload,
-        )
+        self._dataset = self._init_pyg_dataset()
+
+    @abstractmethod
+    def _init_pyg_dataset(self):
+        """
+        Initialize the underlying PyG dataset.
+
+        Returns:
+            The PyG dataset instance.
+        """
+        pass
 
     @abstractmethod
     def _get_data(self, idx: int) -> Data:

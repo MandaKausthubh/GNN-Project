@@ -23,7 +23,6 @@ class DBLP(SingleGraphWrapper):
         root: Root directory where data is stored.
         transform: Transform to apply to each graph.
         pre_transform: Transform to apply once before loading.
-        pre_filter: Filter to apply before returning graphs.
         force_reload: Force reload of cached data.
 
     Statistics:
@@ -33,10 +32,14 @@ class DBLP(SingleGraphWrapper):
     """
 
     _pyg_dataset_cls = PyGDBLP
-    _raw_file_names = ["edges.txt", "node_labels.txt", "node_features.txt"]
 
-    # Using a reliable source for the DBLP dataset
-    url = "https://github.com/shwimal/GNN-Datasets/raw/refs/heads/main/DBLP.zip"
+    def _init_pyg_dataset(self):
+        return self._pyg_dataset_cls(
+            root=self.root,
+            transform=self.transform,
+            pre_transform=self.pre_transform,
+            force_reload=self.force_reload,
+        )
 
     def _get_data(self, idx: int):
         """Get graph data from underlying DBLP dataset."""
