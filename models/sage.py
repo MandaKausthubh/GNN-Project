@@ -114,12 +114,13 @@ class SAGEWrapper(BaseModelWrapper):
         Args:
             x: Node feature tensor.
             edge_index: Edge indices.
-            edge_weight: Optional edge weights.
+            edge_weight: Optional edge weights (not used by SAGEConv).
 
         Returns:
             Node embeddings.
         """
-        return self._model(x, edge_index, edge_weight=edge_weight)
+        # Note: SAGEConv doesn't support edge_weight, so we ignore it
+        return self._model(x, edge_index)
 
     def get_embeddings(self, data) -> Tensor:
         """
