@@ -4,7 +4,7 @@ Example usage of the GNN dataset wrappers.
 
 import argparse
 import os
-from datasets import AmazonPhotos, EmailEuCore, DBLP
+from gnn_datasets import AmazonPhotos, EmailEuCore, DBLP
 
 
 def main():
