@@ -68,7 +68,12 @@ class ResidualGNNLayer(nn.Module):
         identity = identity if identity is not None else x
 
         # Message passing
-        h = self.conv(x, edge_index, edge_weight=edge_weight, edge_attr=edge_attr)
+        # Only pass edge_attr to convolutions that support it (GCNConv does not)
+        conv_class_name = self.conv.__class__.__name__
+        if edge_attr is not None and conv_class_name != 'GCNConv':
+            h = self.conv(x, edge_index, edge_weight=edge_weight, edge_attr=edge_attr)
+        else:
+            h = self.conv(x, edge_index, edge_weight=edge_weight)
 
         # Normalization
         if self.norm is not None:
@@ -228,7 +233,12 @@ class ResidualGNNWrapper(nn.Module):
             identity = x  # Residual connection
 
             # Convolution
-            h = conv(x, edge_index, edge_weight=edge_weight, edge_attr=edge_attr)
+            # Only pass edge_attr to convolutions that support it (GCNConv does not)
+            conv_class_name = conv.__class__.__name__
+            if edge_attr is not None and conv_class_name != 'GCNConv':
+                h = conv(x, edge_index, edge_weight=edge_weight, edge_attr=edge_attr)
+            else:
+                h = conv(x, edge_index, edge_weight=edge_weight)
 
             # Normalization (skip last layer)
             if i < self.num_layers - 1:
