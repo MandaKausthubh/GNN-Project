@@ -8,7 +8,7 @@ import os
 import torch
 import torch.nn as nn
 from gnn_datasets import AmazonPhotos, EmailEuCore, DBLP
-from models import GCNWrapper, GATWrapper, SAGEWrapper
+from models import GCNWrapper, GATWrapper, SAGEWrapper, PPNPWrapper, APPNPWrapper
 from utils import Trainer, ResidualGNNWrapper
 
 
@@ -64,7 +64,7 @@ def main():
     parser.add_argument(
         "--model",
         type=str,
-        choices=["gcn", "gat", "sage", "residual_gcn", "residual_gat", "residual_sage"],
+        choices=["gcn", "gat", "sage", "residual_gcn", "residual_gat", "residual_sage", "ppnp", "appnp"],
         default="residual_gcn",
         help="Model type (default: residual_gcn)",
     )
@@ -116,6 +116,18 @@ def main():
         type=float,
         default=1.0,
         help="Residual blending alpha (default: 1.0)",
+    )
+    parser.add_argument(
+        "--K",
+        type=int,
+        default=10,
+        help="Number of propagation iterations for APPNP (default: 10)",
+    )
+    parser.add_argument(
+        "--alpha",
+        type=float,
+        default=0.1,
+        help="Teleport probability for PPNP/APPNP (default: 0.1)",
     )
     parser.add_argument(
         "--lr",
@@ -173,6 +185,9 @@ def main():
     print(f"  Normalization: {args.norm}")
     print(f"  Use residual: {args.use_residual}")
     print(f"  Residual alpha: {args.residual_alpha}")
+    if args.model in ["ppnp", "appnp"]:
+        print(f"  K (propagation steps): {args.K}")
+        print(f"  Alpha (teleport prob): {args.alpha}")
     print(f"  Learning rate: {args.lr}")
     print(f"  Weight decay: {args.weight_decay}")
     print(f"  Gradient clip: {args.gradient_clip}")
@@ -239,10 +254,32 @@ def main():
             out_channels=num_classes,
             dropout=args.dropout,
         )
+    elif args.model == "appnp":
+        model = APPNPWrapper(
+            in_channels=in_channels,
+            hidden_channels=args.hidden_channels,
+            num_layers=args.num_layers,
+            out_channels=num_classes,
+            dropout=args.dropout,
+            K=args.K,
+            alpha=args.alpha,
+        )
+    elif args.model == "ppnp":
+        model = PPNPWrapper(
+            in_channels=in_channels,
+            hidden_channels=args.hidden_channels,
+            num_layers=args.num_layers,
+            out_channels=num_classes,
+            dropout=args.dropout,
+            alpha=args.alpha,
+        )
+        # Precompute PPR matrix for efficiency
+        print("Precomputing PPR matrix...")
+        model.precompute_ppr(data.edge_index, data.num_nodes)
+        print("PPR matrix computed.")
 
     print(f"\nModel: {model.__class__.__name__}")
-    if hasattr(model, "_model"):
-        print(f"Parameters: {sum(p.numel() for p in model._model.parameters()):,}")
+    print(f"Parameters: {sum(p.numel() for p in model.parameters()):,}")
 
     # Setup optimizer
     optimizer = torch.optim.Adam(
