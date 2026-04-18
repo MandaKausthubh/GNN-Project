@@ -82,6 +82,10 @@ class BaseDatasetWrapper(ABC):
         """Get a single graph by index."""
         return self._get_data(idx)
 
+    def __getitem__(self, idx: int) -> Data:
+        """Get a single graph by index (enables dataset[idx] syntax)."""
+        return self._get_data(idx)
+
     @property
     def name(self) -> str:
         """Dataset name."""
