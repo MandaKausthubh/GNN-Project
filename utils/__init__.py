@@ -7,7 +7,7 @@ from .normalization import (
     PairNorm,
     DropoutRegularization,
 )
-from .residual import ResidualGNNWrapper, ResidualGNNLayer
+from .residual import ResidualGNNWrapper, ResidualGNNLayer, ResidualAPPNPWrapper
 
 __all__ = [
     # Training
@@ -26,4 +26,5 @@ __all__ = [
     # Residual
     "ResidualGNNWrapper",
     "ResidualGNNLayer",
+    "ResidualAPPNPWrapper",
 ]
