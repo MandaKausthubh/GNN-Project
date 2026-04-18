@@ -196,6 +196,24 @@ class APPNPWrapper(BaseModelWrapper):
         if hasattr(self.prop, 'reset_parameters'):
             self.prop.reset_parameters()
 
+    def parameters(self, recurse: bool = True):
+        """Return an iterator over model parameters."""
+        return self.mlp.parameters(recurse)
+
+    def train(self, mode: bool = True):
+        """Set the model to training mode."""
+        self.mlp.train(mode)
+        return self
+
+    def eval(self):
+        """Set the model to evaluation mode."""
+        return self.train(False)
+
+    def to(self, *args, **kwargs):
+        """Move the model to the specified device."""
+        self.mlp = self.mlp.to(*args, **kwargs)
+        return self
+
 
 class PPNPWrapper(BaseModelWrapper):
     """
@@ -479,3 +497,23 @@ class PPNPWrapper(BaseModelWrapper):
             if hasattr(layer, 'reset_parameters'):
                 layer.reset_parameters()
         self.ppr_matrix = None
+
+    def parameters(self, recurse: bool = True):
+        """Return an iterator over model parameters."""
+        return self.mlp.parameters(recurse)
+
+    def train(self, mode: bool = True):
+        """Set the model to training mode."""
+        self.mlp.train(mode)
+        return self
+
+    def eval(self):
+        """Set the model to evaluation mode."""
+        return self.train(False)
+
+    def to(self, *args, **kwargs):
+        """Move the model to the specified device."""
+        self.mlp = self.mlp.to(*args, **kwargs)
+        if self.ppr_matrix is not None:
+            self.ppr_matrix = self.ppr_matrix.to(*args, **kwargs)
+        return self
