@@ -84,7 +84,7 @@ class GCNWrapper(BaseModelWrapper):
     def forward(
         self,
         x: Tensor,
-        edge_index: Union[Tensor, SparseTensor],
+        edge_index,
         edge_weight: Optional[Tensor] = None,
     ) -> Tensor:
         """
@@ -98,6 +98,8 @@ class GCNWrapper(BaseModelWrapper):
         Returns:
             Node embeddings.
         """
+        assert self._model is not None, "Model not initialized. Call _init_pyg_model first."
+
         return self._model(x, edge_index, edge_weight=edge_weight)
 
     def get_embeddings(self, data) -> Tensor:
