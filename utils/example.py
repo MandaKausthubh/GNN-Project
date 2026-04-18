@@ -12,6 +12,46 @@ from models import GCNWrapper, GATWrapper
 from utils import Trainer, ResidualGNNWrapper
 
 
+def create_masks(data, train_ratio=0.6, val_ratio=0.2, test_ratio=0.2, seed=42):
+    """
+    Create train/val/test masks for node classification if they don't exist.
+
+    Args:
+        data: PyG Data object
+        train_ratio: Fraction of nodes for training
+        val_ratio: Fraction of nodes for validation
+        test_ratio: Fraction of nodes for testing
+        seed: Random seed for reproducibility
+    """
+    if hasattr(data, 'train_mask') and data.train_mask is not None:
+        print("Masks already exist, skipping mask creation")
+        return data
+
+    num_nodes = data.num_nodes
+    torch.manual_seed(seed)
+
+    # Create random permutation of node indices
+    perm = torch.randperm(num_nodes)
+
+    # Calculate split sizes
+    train_size = int(num_nodes * train_ratio)
+    val_size = int(num_nodes * val_ratio)
+
+    # Create masks
+    data.train_mask = torch.zeros(num_nodes, dtype=torch.bool)
+    data.val_mask = torch.zeros(num_nodes, dtype=torch.bool)
+    data.test_mask = torch.zeros(num_nodes, dtype=torch.bool)
+
+    data.train_mask[perm[:train_size]] = True
+    data.val_mask[perm[train_size:train_size + val_size]] = True
+    data.test_mask[perm[train_size + val_size:]] = True
+
+    print(f"Created masks: train={data.train_mask.sum().item()}, "
+          f"val={data.val_mask.sum().item()}, test={data.test_mask.sum().item()}")
+
+    return data
+
+
 def main():
     parser = argparse.ArgumentParser(description="GNN Training with Utils")
     parser.add_argument(
@@ -152,6 +192,9 @@ def main():
 
     if args.dataset != "dblp":
         data = dataset[0]
+
+    # Create train/val/test masks if they don't exist
+    data = create_masks(data)
 
     print(f"Graph stats: {data.num_nodes} nodes, {data.edge_index.shape[1]} edges")
     num_classes = data.y.max().item() + 1
