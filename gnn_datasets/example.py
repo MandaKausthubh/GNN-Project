@@ -73,6 +73,11 @@ def main():
         action="store_true",
         help="Print detailed statistics for each graph",
     )
+    parser.add_argument(
+        "--apa",
+        action="store_true",
+        help="Compute APA meta-path homograph for DBLP (Author-Paper-Author projection)",
+    )
 
     args = parser.parse_args()
 
@@ -113,6 +118,17 @@ def main():
             print_hetero_data_stats(data, name)
         else:
             print_homo_data_stats(data, name)
+
+        # DBLP-specific: APA homograph projection
+        if name == "DBLP" and args.apa:
+            print("\n" + "-" * 40)
+            print("APA Meta-Path Homograph (Author-Paper-Author)")
+            print("-" * 40)
+            homograph = dataset.get_homograph_apa()
+            print_homo_data_stats(homograph, "DBLP-APA")
+            print(f"  Trainable nodes: {homograph.train_mask.sum().item() if hasattr(homograph, 'train_mask') and homograph.train_mask is not None else 'N/A'}")
+            print(f"  Val nodes: {homograph.val_mask.sum().item() if hasattr(homograph, 'val_mask') and homograph.val_mask is not None else 'N/A'}")
+            print(f"  Test nodes: {homograph.test_mask.sum().item() if hasattr(homograph, 'test_mask') and homograph.test_mask is not None else 'N/A'}")
 
     print()
 
