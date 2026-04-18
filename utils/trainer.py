@@ -241,7 +241,11 @@ class Trainer:
 
             # Scheduler step
             if self.scheduler is not None:
-                self.scheduler.step()
+                # ReduceLROnPlateau requires a metric, others don't
+                if isinstance(self.scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                    self.scheduler.step(val_loss)
+                else:
+                    self.scheduler.step()
 
             # Logging
             if self.use_wandb:
