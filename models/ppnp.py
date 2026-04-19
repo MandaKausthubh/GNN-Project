@@ -390,8 +390,8 @@ class PPNPWrapper(BaseModelWrapper):
         accum = torch.eye(num_nodes, device=edge_index.device)
         coeff = (1 - self.alpha)
 
-        # Use power iteration to approximate PPR
-        for _ in range(50):  # Sufficient iterations for convergence
+        # Use power iteration to approximate PPR (10-15 iterations is usually enough)
+        for _ in range(15):
             accum = torch.sparse.mm(adj, accum) if accum.is_sparse else accum @ adj.to_dense()
             ppr = ppr + self.alpha * coeff * accum
             coeff = coeff * (1 - self.alpha)
