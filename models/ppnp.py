@@ -202,12 +202,13 @@ class APPNPWrapper(BaseModelWrapper):
 
     def train(self, mode: bool = True):
         """Set the model to training mode."""
-        self.mlp.train(mode)
+        super().train(mode)
         return self
 
     def eval(self):
         """Set the model to evaluation mode."""
-        return self.train(False)
+        super().eval()
+        return self
 
     def to(self, *args, **kwargs):
         """Move the model to the specified device."""
@@ -504,12 +505,13 @@ class PPNPWrapper(BaseModelWrapper):
 
     def train(self, mode: bool = True):
         """Set the model to training mode."""
-        self.mlp.train(mode)
+        super().train(mode)
         return self
 
     def eval(self):
         """Set the model to evaluation mode."""
-        return self.train(False)
+        super().eval()
+        return self
 
     def to(self, *args, **kwargs):
         """Move the model to the specified device."""
