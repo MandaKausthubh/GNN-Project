@@ -200,8 +200,16 @@ def main():
         dataset = AmazonPhotos(root=os.path.join(args.data_dir, "AmazonPhotos"))
     elif args.dataset == "dblp":
         dataset = DBLP(root=os.path.join(args.data_dir, "DBLP"))
-        print("Using DBLP APA homograph projection")
+        print("Using DBLP APA homograph projection (Author-Paper-Author)")
         data = dataset.get_homograph_apa()
+        # PyG's DBLP stores masks as 2D: [num_authors, num_splits].
+        # Flatten to 1D by taking the first training split so the Trainer
+        # can use them with standard boolean indexing.
+        for mask_name in ("train_mask", "val_mask", "test_mask"):
+            mask = getattr(data, mask_name, None)
+            if mask is not None and mask.dim() == 2:
+                setattr(data, mask_name, mask[:, 0])
+                print(f"  Flattened {mask_name} from 2D to 1D (using split 0)")
     elif args.dataset == "email":
         dataset = EmailEuCore(root=os.path.join(args.data_dir, "EmailEuCore"))
     else:
