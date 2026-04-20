@@ -57,7 +57,7 @@ def main():
     parser.add_argument(
         "--dataset",
         type=str,
-        choices=["amazon", "dblp"],
+        choices=["amazon", "dblp", "email"],
         default="amazon",
         help="Dataset to use (default: amazon)",
     )
@@ -187,6 +187,8 @@ def main():
         dataset = DBLP(root=os.path.join(args.data_dir, "DBLP"))
         print("Using DBLP APA homograph projection")
         data = dataset.get_homograph_apa()
+    elif args.dataset == "email":
+        dataset = EmailEuCore(root=os.path.join(args.data_dir, "EmailEuCore"))
     else:
         raise ValueError(f"Unknown dataset: {args.dataset}")
 
