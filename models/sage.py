@@ -90,7 +90,7 @@ class SAGEWrapper(BaseModelWrapper):
             hidden_channels=self.hidden_channels,
             num_layers=self.num_layers,
             out_channels=self.out_channels,
-            dropout=self.dropout.p if hasattr(self.dropout, 'p') else 0.0,
+            dropout=self.dropout_p,
             act=self.act,
             act_first=self.act_first,
             norm=self.norm,

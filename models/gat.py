@@ -90,7 +90,7 @@ class GATWrapper(BaseModelWrapper):
             v2=self.v2,
             heads=self.heads,
             concat=self.concat,
-            dropout=self.dropout if hasattr(self, 'dropout') else 0.0,
+            dropout=self.dropout_p,
             act=self.act,
             act_first=self.act_first,
             norm=self.norm,
