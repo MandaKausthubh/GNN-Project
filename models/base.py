@@ -54,7 +54,10 @@ class BaseModelWrapper(Module, ABC):
         self.hidden_channels = hidden_channels
         self.num_layers = num_layers
         self.out_channels = out_channels if out_channels is not None else hidden_channels
-        self.dropout = torch.nn.Dropout(p=dropout)
+        # Store the raw float so subclasses can pass it to PyG model constructors.
+        # Keep a Dropout module separately for use in custom forward passes.
+        self.dropout_p = float(dropout)
+        self.dropout = torch.nn.Dropout(p=self.dropout_p)
         self.act = act
         self.act_first = act_first
         self.norm = norm
