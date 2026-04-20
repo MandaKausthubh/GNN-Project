@@ -292,7 +292,7 @@ class Trainer:
         return {
             "predictions": pred,
             "logits": out,
-            "embeddings": self.model.emb,
+            "embeddings": getattr(self.model, "emb", None),
         }
 
     @torch.no_grad()

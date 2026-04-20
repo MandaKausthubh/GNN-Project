@@ -215,8 +215,20 @@ def main():
 
     print(f"Graph stats: {data.num_nodes} nodes, {data.edge_index.shape[1]} edges")
     num_classes = data.y.max().item() + 1
+
+    # EmailEuCore (and some other datasets) have no node features — fall back to
+    # an identity matrix so each node receives a unique one-hot input vector.
+    if data.x is None:
+        print("No node features found — using identity matrix as node features.")
+        data.x = torch.eye(data.num_nodes, dtype=torch.float)
+
     in_channels = data.x.shape[1]
     print(f"Features: {in_channels}, Classes: {num_classes}")
+
+    # Move data to the same device the Trainer will use.
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    data = data.to(device)
+    print(f"Data moved to: {device}")
 
     # Create model
     if args.model.startswith("residual_"):
