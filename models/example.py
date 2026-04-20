@@ -7,7 +7,7 @@ import os
 
 import torch
 from gnn_datasets import AmazonPhotos, EmailEuCore, DBLP
-from models import GCNWrapper, GATWrapper
+from models import GCNWrapper, GATWrapper, SAGEWrapper, PPNPWrapper, APPNPWrapper
 
 
 def train_epoch(model, data, optimizer, criterion):
@@ -48,7 +48,7 @@ def main():
     parser.add_argument(
         "--model",
         type=str,
-        choices=["gcn", "gat"],
+        choices=["gcn", "gat", "sage", "ppnp", "appnp"],
         default="gcn",
         help="Model to use (default: gcn)",
     )
@@ -82,6 +82,18 @@ def main():
         default=0.5,
         help="Dropout probability (default: 0.5)",
     )
+    parser.add_argument(
+        "--K",
+        type=int,
+        default=10,
+        help="Number of propagation iterations for APPNP (default: 10)",
+    )
+    parser.add_argument(
+        "--alpha",
+        type=float,
+        default=0.1,
+        help="Teleport probability for PPNP/APPNP (default: 0.1)",
+    )
 
     args = parser.parse_args()
 
@@ -90,7 +102,10 @@ def main():
     print(f"Model: {args.model}")
     print(f"Hidden channels: {args.hidden_channels}")
     print(f"Num layers: {args.num_layers}")
-    print(f"Dropout: {args.dropout}\n")
+    print(f"Dropout: {args.dropout}")
+    if args.model in ["ppnp", "appnp"]:
+        print(f"K: {args.K}, Alpha: {args.alpha}")
+    print()
 
     # Load dataset
     if args.dataset == "amazon":
@@ -127,12 +142,43 @@ def main():
             out_channels=num_classes,
             dropout=args.dropout,
         )
+    elif args.model == "sage":
+        model = SAGEWrapper(
+            in_channels=in_channels,
+            hidden_channels=args.hidden_channels,
+            num_layers=args.num_layers,
+            out_channels=num_classes,
+            dropout=args.dropout,
+        )
+    elif args.model == "appnp":
+        model = APPNPWrapper(
+            in_channels=in_channels,
+            hidden_channels=args.hidden_channels,
+            num_layers=args.num_layers,
+            out_channels=num_classes,
+            dropout=args.dropout,
+            K=args.K,
+            alpha=args.alpha,
+        )
+    elif args.model == "ppnp":
+        model = PPNPWrapper(
+            in_channels=in_channels,
+            hidden_channels=args.hidden_channels,
+            num_layers=args.num_layers,
+            out_channels=num_classes,
+            dropout=args.dropout,
+            alpha=args.alpha,
+        )
+        # Precompute PPR matrix for efficiency
+        print("Precomputing PPR matrix...")
+        model.precompute_ppr(data.edge_index, data.num_nodes)
+        print("PPR matrix computed.\n")
 
     print(f"\nModel: {model}")
-    print(f"Parameters: {sum(p.numel() for p in model._model.parameters()):,}")
+    print(f"Parameters: {sum(p.numel() for p in model.parameters()):,}")
 
     # Setup training
-    optimizer = torch.optim.Adam(model._model.parameters(), lr=0.01)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
     criterion = torch.nn.CrossEntropyLoss()
 
     # Training loop

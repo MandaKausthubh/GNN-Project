@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "Bash(python -c \"from models import PPNPWrapper, APPNPWrapper; print\\('Import successful'\\)\")"
+    ]
+  }
+}
