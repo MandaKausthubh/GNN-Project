@@ -170,6 +170,13 @@ def main():
         default=None,
         help="Wandb run name (default: auto-generated)",
     )
+    parser.add_argument(
+        "--email-feature-mode",
+        type=str,
+        choices=["none", "degree", "centrality", "local"],
+        default="none",
+        help="Feature mode for EmailEuCore ablation studies (default: none)",
+    )
 
     args = parser.parse_args()
 
@@ -193,6 +200,8 @@ def main():
     print(f"  Gradient clip: {args.gradient_clip}")
     print(f"  Early stopping: {args.early_stopping}")
     print(f"  Wandb enabled: {args.wandb}")
+    if args.dataset == "email":
+        print(f"  Email feature mode: {args.email_feature_mode}")
     print()
 
     # Load dataset
@@ -211,7 +220,12 @@ def main():
                 setattr(data, mask_name, mask[:, 0])
                 print(f"  Flattened {mask_name} from 2D to 1D (using split 0)")
     elif args.dataset == "email":
-        dataset = EmailEuCore(root=os.path.join(args.data_dir, "EmailEuCore"))
+        dataset = EmailEuCore(
+            root=os.path.join(args.data_dir, "EmailEuCore"),
+            feature_mode=args.email_feature_mode,
+        )
+        if args.email_feature_mode != "none":
+            print(f"Using EmailEuCore with {args.email_feature_mode} features (ablation mode)")
     else:
         raise ValueError(f"Unknown dataset: {args.dataset}")
 
@@ -224,8 +238,7 @@ def main():
     print(f"Graph stats: {data.num_nodes} nodes, {data.edge_index.shape[1]} edges")
     num_classes = data.y.max().item() + 1
 
-    # EmailEuCore (and some other datasets) have no node features — fall back to
-    # an identity matrix so each node receives a unique one-hot input vector.
+    # Fallback to identity matrix if no node features exist
     if data.x is None:
         print("No node features found — using identity matrix as node features.")
         data.x = torch.eye(data.num_nodes, dtype=torch.float)
