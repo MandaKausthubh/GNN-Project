@@ -358,7 +358,7 @@ class Trainer:
 
     def __repr__(self) -> str:
         if type(self.model) == ResidualGNNWrapper:
-            model_name = f"GCNWrapper[{self.model.model_type}]"
+            model_name = f"ResidualWrapper[{self.model.model_type}]"
         else:
             model_name = self.model.__class__.__name__
         return (

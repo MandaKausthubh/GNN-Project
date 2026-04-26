@@ -118,16 +118,15 @@ class DBLP(SingleGraphWrapper):
         else:
             edge_index = torch.tensor([src_authors, dst_authors], dtype=torch.long)
 
-            # Make undirected and remove self-loops
+            # Make undirected
             edge_index = to_undirected(edge_index)
-            edge_index, _ = torch.unique(edge_index, dim=1, return_inverse=True)
 
-        # Check for isolated nodes
-        if edge_index.numel() > 0:
-            edge_index, _ = to_undirected(edge_index)
-            # Remove any remaining self-loops
+            # Remove self-loops
             mask = edge_index[0] != edge_index[1]
             edge_index = edge_index[:, mask]
+
+            # Remove duplicate edges
+            edge_index = torch.unique(edge_index, dim=1)
 
         # Create Data object
         proj_data = Data(
