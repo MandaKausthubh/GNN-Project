@@ -150,6 +150,7 @@ class ResidualGNNWrapper(nn.Module):
         self.norm_type = norm
         self.use_residual = use_residual
         self.residual_alpha = residual_alpha
+        self.model_type = model_type
 
         # Build base convolution layers
         self.convs = nn.ModuleList()

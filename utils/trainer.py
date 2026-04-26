@@ -13,6 +13,8 @@ from torch import Tensor
 from torch_geometric.data import Data
 from tqdm import tqdm
 
+from models.gcn import GCNWrapper
+
 
 class Trainer:
     """
@@ -354,9 +356,13 @@ class Trainer:
         return checkpoint.get("epoch", 0)
 
     def __repr__(self) -> str:
+        if type(self.model) == GCNWrapper:
+            model_name = f"GCNWrapper[{self.model.model_type}]"
+        else:
+            model_name = self.model.__class__.__name__
         return (
             f"Trainer(\n"
-            f"  model={self.model.__class__.__name__},\n"
+            f"  model={model_name},\n"
             f"  device={self.device},\n"
             f"  wandb={'enabled' if self.use_wandb else 'disabled'},\n"
             f"  mixed_precision={'enabled' if self.mixed_precision else 'disabled'}\n"
