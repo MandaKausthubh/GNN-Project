@@ -14,6 +14,7 @@ from torch_geometric.data import Data
 from tqdm import tqdm
 
 from models.gcn import GCNWrapper
+from utils.residual import ResidualGNNWrapper
 
 
 class Trainer:
@@ -356,7 +357,7 @@ class Trainer:
         return checkpoint.get("epoch", 0)
 
     def __repr__(self) -> str:
-        if type(self.model) == GCNWrapper:
+        if type(self.model) == ResidualGNNWrapper:
             model_name = f"GCNWrapper[{self.model.model_type}]"
         else:
             model_name = self.model.__class__.__name__
