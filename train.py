@@ -702,9 +702,11 @@ def benchmark_all_datasets(
     device: Optional[str] = None,
     output_dir: str = "./outputs",
     verbose: bool = False,
+    tune_hyperparams: bool = True,
+    n_trials: int = 10,
 ) -> Dict[str, Any]:
     """
-    Benchmark all models across all datasets.
+    Benchmark all models across all datasets with optional hyperparameter tuning.
 
     Args:
         data_dir: Data root directory.
@@ -714,6 +716,8 @@ def benchmark_all_datasets(
         device: Device to train on.
         output_dir: Output directory.
         verbose: Print progress.
+        tune_hyperparams: Whether to perform hyperparameter tuning before benchmarking.
+        n_trials: Number of trials for hyperparameter tuning (if enabled).
 
     Returns:
         Dictionary with all benchmark results.
@@ -723,7 +727,7 @@ def benchmark_all_datasets(
     all_results = {}
 
     # Outer progress bar for datasets
-    # dataset_pbar = tqdm(total=len(datasets), desc="[Benchmark All]", bar_format="{desc} |{bar}| {postfix}", ncols=100, position=0)
+    dataset_pbar = tqdm(total=len(datasets), desc="[Benchmark All]", bar_format="{desc} |{bar}| {postfix}", ncols=100, position=0)
 
     for dataset_idx, dataset_name in enumerate(datasets):
         # Load dataset
@@ -735,34 +739,50 @@ def benchmark_all_datasets(
         if verbose:
             print(f"\nDataset stats: {stats}")
 
-        # dataset_pbar.set_postfix_str(f"Dataset: {dataset_name}")
+        dataset_pbar.set_postfix_str(f"Dataset: {dataset_name}")
 
         # Inner progress bar for models
         model_pbar = tqdm(total=len(models), desc=f"  [{dataset_name}]", bar_format="{desc} |{bar}| {postfix}", ncols=100, position=1)
 
         for model_name in models:
-            # Default hyperparameters
-            default_hyperparams = {
-                "hidden_channels": 128,
-                "num_layers": 2,
-                "dropout": 0.5,
-                "norm": "layer",
-                "lr": 0.01,
-                "weight_decay": 5e-4,
-            }
+            # Hyperparameter tuning phase
+            if tune_hyperparams:
+                print(f"\n    [{model_name}] - Tuning hyperparameters ({n_trials} trials)...")
+                best_config, _, _ = hyperparameter_search(
+                    model_name=model_name,
+                    dataset_name=dataset_name,
+                    data=data,
+                    search_type="random",
+                    n_trials=n_trials,
+                    epochs=epochs,
+                    device=device,
+                    verbose=False,
+                )
+                print(f"    Best config found: {best_config}")
+                hyperparams_for_benchmark = best_config
+            else:
+                # Default hyperparameters
+                hyperparams_for_benchmark = {
+                    "hidden_channels": 128,
+                    "num_layers": 2,
+                    "dropout": 0.5,
+                    "norm": "layer",
+                    "lr": 0.01,
+                    "weight_decay": 5e-4,
+                }
 
             model_results = {"accuracy": [], "f1_score": [], "configs": []}
 
             # Innermost progress bar for runs
-            # run_pbar = tqdm(total=n_runs, desc=f"    [{model_name}] - Config(default)", bar_format="{desc} |{bar}| {postfix}", ncols=100, position=2)
+            config_summary = f"hid={hyperparams_for_benchmark.get('hidden_channels', '?')},layers={hyperparams_for_benchmark.get('num_layers', '?')},lr={hyperparams_for_benchmark.get('lr', '?')}"
+            run_pbar = tqdm(total=n_runs, desc=f"    [{model_name}] - {config_summary}", bar_format="{desc} |{bar}| {postfix}", ncols=100, position=2)
 
             for run in range(n_runs):
                 seed = 42 + run
                 seed_everything(seed)
                 data_run = create_masks(data, seed=seed) if not hasattr(data, 'train_mask') else data
 
-                hyperparams_for_run = {**default_hyperparams}
-                # Note: hyperparams override not supported in benchmark_all_datasets mode
+                hyperparams_for_run = {**hyperparams_for_benchmark}
 
                 try:
                     _, test_metrics, _ = train_single_config(
@@ -779,16 +799,16 @@ def benchmark_all_datasets(
                     model_results["f1_score"].append(test_metrics["f1_score"])
                     model_results["configs"].append(hyperparams_for_run)
 
-                    # run_pbar.set_postfix_str(f"R{run+1}: Acc={test_metrics['accuracy']:.4f}")
-                    # run_pbar.update(1)
+                    run_pbar.set_postfix_str(f"R{run+1}: Acc={test_metrics['accuracy']:.4f}")
+                    run_pbar.update(1)
 
                 except Exception as e:
-                    # run_pbar.set_postfix_str(f"R{run+1}: Failed - {str(e)[:30]}")
-                    # run_pbar.update(1)
+                    run_pbar.set_postfix_str(f"R{run+1}: Failed - {str(e)[:30]}")
+                    run_pbar.update(1)
                     if verbose:
                         print(f"  Run failed: {e}")
 
-            # run_pbar.close()
+            run_pbar.close()
 
             # Store results for this model
             if model_results["accuracy"]:
@@ -801,15 +821,16 @@ def benchmark_all_datasets(
                     "f1_std": float(np.std(model_results["f1_score"])),
                     "runs": n_runs,
                     "individual_runs": model_results,
+                    "best_config": hyperparams_for_benchmark if tune_hyperparams else None,
                 }
                 model_pbar.set_postfix_str(f"{model_name}: Acc={all_results[dataset_name]['benchmark'][model_name]['accuracy_mean']:.4f}")
                 model_pbar.update(1)
 
         model_pbar.close()
-        # dataset_pbar.update(1)
+        dataset_pbar.update(1)
 
-    # dataset_pbar.set_postfix_str("COMPLETE")
-    # dataset_pbar.close()
+    dataset_pbar.set_postfix_str("COMPLETE")
+    dataset_pbar.close()
 
     # Print final results summary
     print("\n" + "=" * 80)
@@ -820,7 +841,11 @@ def benchmark_all_datasets(
         benchmark = dataset_results.get("benchmark", dataset_results)
         for model_name, model_results in benchmark.items():
             if isinstance(model_results, dict) and "accuracy_mean" in model_results:
-                print(f"  {model_name}: Acc={model_results['accuracy_mean']:.4f} (+/- {model_results['accuracy_std']:.4f})")
+                config_info = ""
+                if model_results.get("best_config"):
+                    cfg = model_results["best_config"]
+                    config_info = f" | Config: hid={cfg.get('hidden_channels', '?')},layers={cfg.get('num_layers', '?')},lr={cfg.get('lr', '?')}"
+                print(f"  {model_name}: Acc={model_results['accuracy_mean']:.4f} (+/- {model_results['accuracy_std']:.4f}){config_info}")
     print("=" * 80)
 
     # Save aggregated results
@@ -936,6 +961,14 @@ def main():
     )
     parser.add_argument("--save-history-json", action="store_true", default=False)
     parser.add_argument("--save-learning-curves", action="store_true", default=False)
+
+    # Benchmark options
+    parser.add_argument(
+        "--no-tune",
+        action="store_true",
+        default=False,
+        help="Disable hyperparameter tuning in benchmark mode (use default hyperparameters)",
+    )
 
     # Logging
     parser.add_argument("--wandb", action="store_true", default=False)
@@ -1102,8 +1135,9 @@ def main():
         # Final results already printed in benchmark_email_feature_combinations
 
     elif args.mode == "benchmark_all":
-        # Full benchmark across all datasets
-        print("\nFull benchmark across all datasets")
+        # Full benchmark across all datasets with hyperparameter tuning
+        tune_mode = not args.no_tune
+        print(f"\nFull benchmark across all datasets {'with' if tune_mode else 'without'} hyperparameter tuning")
         models = args.models or ["gcn", "gat", "sage", "ppnp", "appnp"]
 
         results = benchmark_all_datasets(
@@ -1114,6 +1148,8 @@ def main():
             device=device,
             output_dir=args.output_dir,
             verbose=args.verbose,
+            tune_hyperparams=tune_mode,
+            n_trials=args.n_trials,
         )
         # Final results already printed in benchmark_all_datasets
 
