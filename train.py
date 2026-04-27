@@ -503,6 +503,7 @@ def benchmark_all_models(
     # Outer progress bar for models
     if use_tqdm:
         # model_pbar = tqdm(total=len(models), desc=f"[{dataset_name}]", bar_format="{desc} |{bar}| {postfix}", ncols=100, position=0)
+        pass
 
     for model_idx, model_name in enumerate(models):
         if verbose:
