@@ -304,7 +304,7 @@ def train_single_config(
         epochs=epochs,
         val_every=1,
         print_every=epochs if not verbose else 10,
-        use_tqdm=not verbose,  # Use tqdm when not in verbose mode
+        use_tqdm=False,  # Disable inner tqdm - outer pbar handles progress
     )
 
     # Final evaluation
@@ -378,9 +378,10 @@ def hyperparameter_search(
     all_results = []
 
     # Create progress bar for hyperparameter search
-    pbar = tqdm(total=len(all_configs), desc="Hyperparameter Search", bar_format="{l_bar}{bar}| {postfix}")
+    pbar = tqdm(total=len(all_configs), desc=f"[{dataset_name}] - [{model_name}]", bar_format="{desc} |{bar}| {postfix}", ncols=100)
 
     for i, config in enumerate(all_configs):
+        config_str = f"hid={config.get('hidden_channels', '?')},layers={config.get('num_layers', '?')},lr={config.get('lr', '?')}"
         try:
             _, val_metrics, _ = train_single_config(
                 model_name=model_name,
@@ -416,19 +417,31 @@ def hyperparameter_search(
                     device=device,
                     verbose=False,
                 )
-                pbar.set_postfix_str(f"Best: {val_metric}={val_score:.4f} | Config: {config}")
+                pbar.set_postfix_str(f"Cfg-{i+1}: {config_str} | {val_metric}={val_score:.4f} (BEST)")
             else:
-                pbar.set_postfix_str(f"{val_metric}={val_score:.4f} (best: {best_val_score:.4f})")
+                pbar.set_postfix_str(f"Cfg-{i+1}: {config_str} | {val_metric}={val_score:.4f}")
 
         except Exception as e:
-            pbar.set_postfix_str(f"Failed: {e}")
+            pbar.set_postfix_str(f"Cfg-{i+1}: {config_str} | FAILED: {str(e)[:30]}")
             if verbose:
                 print(f"  -> Failed: {e}")
             continue
         finally:
             pbar.update(1)
 
+    pbar.set_postfix_str(f"Best: {val_metric}={best_val_score:.4f} | Config: {best_config}")
     pbar.close()
+
+    # Print final results summary
+    print("\n" + "=" * 60)
+    print(f"[FINAL RESULTS - Hyperparameter Search: {model_name} on {dataset_name}]")
+    print("=" * 60)
+    print(f"Best Validation {val_metric}: {best_val_score:.4f}")
+    print(f"Best Config: {best_config}")
+    if best_test_metrics:
+        print(f"Test Accuracy: {best_test_metrics.get('accuracy', 0):.4f}")
+        print(f"Test F1 Score: {best_test_metrics.get('f1_score', 0):.4f}")
+    print("=" * 60)
 
     return best_config, best_test_metrics, {"trials": all_results}
 
@@ -447,6 +460,7 @@ def benchmark_all_models(
     device: Optional[str] = None,
     output_dir: str = "./outputs",
     verbose: bool = False,
+    use_tqdm: bool = True,
 ) -> Dict[str, Any]:
     """
     Benchmark all specified models on a dataset.
@@ -461,6 +475,7 @@ def benchmark_all_models(
         device: Device to train on.
         output_dir: Directory for saving results.
         verbose: Print progress.
+        use_tqdm: Whether to use tqdm progress bar.
 
     Returns:
         Dictionary with benchmark results.
@@ -479,11 +494,13 @@ def benchmark_all_models(
     }
 
     all_results = {}
+    total_runs = len(models) * n_runs
 
-    # Create progress bar for models
-    model_pbar = tqdm(total=len(models), desc="Benchmarking", bar_format="{l_bar}{bar}| {postfix}")
+    # Outer progress bar for models
+    if use_tqdm:
+        model_pbar = tqdm(total=len(models), desc=f"[{dataset_name}]", bar_format="{desc} |{bar}| {postfix}", ncols=100, position=0)
 
-    for model_name in models:
+    for model_idx, model_name in enumerate(models):
         if verbose:
             print(f"\n{'='*60}")
             print(f"Benchmarking {model_name.upper()} on {dataset_name}")
@@ -495,8 +512,9 @@ def benchmark_all_models(
             "configs": [],
         }
 
-        # Progress bar for runs
-        run_pbar = tqdm(total=n_runs, desc=f"{model_name}", leave=False, bar_format="{l_bar}{bar}| {postfix}")
+        # Inner progress bar for runs
+        if use_tqdm:
+            run_pbar = tqdm(total=n_runs, desc=f"  [{model_name}] - Config(default)", bar_format="{desc} |{bar}| {postfix}", ncols=100, position=1)
 
         for run in range(n_runs):
             # Add slight seed variation for each run
@@ -525,17 +543,19 @@ def benchmark_all_models(
                 model_results["f1_score"].append(test_metrics["f1_score"])
                 model_results["configs"].append(hyperparams_for_run)
 
-                run_pbar.set_postfix_str(f"Acc={test_metrics['accuracy']:.4f}, F1={test_metrics['f1_score']:.4f}")
+                if use_tqdm:
+                    run_pbar.set_postfix_str(f"R{run+1}: Acc={test_metrics['accuracy']:.4f}, F1={test_metrics['f1_score']:.4f}")
+                    run_pbar.update(1)
 
             except Exception as e:
-                run_pbar.set_postfix_str(f"Failed: {e}")
+                if use_tqdm:
+                    run_pbar.set_postfix_str(f"R{run+1}: Failed - {str(e)[:30]}")
+                    run_pbar.update(1)
                 if verbose:
                     print(f"  Run failed: {e}")
-                continue
-            finally:
-                run_pbar.update(1)
 
-        run_pbar.close()
+        if use_tqdm:
+            run_pbar.close()
 
         # Compute statistics
         if model_results["accuracy"]:
@@ -549,11 +569,12 @@ def benchmark_all_models(
                 "runs": n_runs,
                 "individual_runs": model_results,
             }
-            model_pbar.set_postfix_str(f"{model_name}: Acc={acc_mean:.4f} (+/- {acc_std:.4f})")
+            if use_tqdm:
+                model_pbar.set_postfix_str(f"{model_name}: Acc={acc_mean:.4f}(+/-{acc_std:.4f})")
+                model_pbar.update(1)
 
-        model_pbar.update(1)
-
-    model_pbar.close()
+    if use_tqdm:
+        model_pbar.close()
 
     # Save results
     os.makedirs(output_dir, exist_ok=True)
@@ -562,11 +583,16 @@ def benchmark_all_models(
     with open(results_path, 'w') as f:
         json.dump(all_results, f, indent=2)
 
+    # Print final results summary
+    print("\n" + "=" * 60)
+    print(f"[FINAL RESULTS - {dataset_name.upper()}]")
+    print("=" * 60)
+    for model_name, results in all_results.items():
+        print(f"  {model_name}: Acc={results['accuracy_mean']:.4f} (+/- {results['accuracy_std']:.4f})")
+    print("=" * 60)
+
     if verbose:
         print(f"\nBenchmark results saved to: {results_path}")
-        print("\nSummary:")
-        for model_name, results in all_results.items():
-            print(f"  {model_name}: Acc={results['accuracy_mean']:.4f} (+/- {results['accuracy_std']:.4f})")
 
     return all_results
 
@@ -611,11 +637,11 @@ def benchmark_email_feature_combinations(
     all_results = {}
 
     # Progress bar for feature combinations
-    combo_pbar = tqdm(total=len(feature_combos), desc="Feature Combos", bar_format="{l_bar}{bar}| {postfix}")
+    combo_pbar = tqdm(total=len(feature_combos), desc="[Email-Eu-Core]", bar_format="{desc} |{bar}| {postfix}", ncols=100, position=0)
 
     for combo in feature_combos:
         combo_name = "_".join([k.replace("use_", "") for k, v in combo.items() if v])
-        combo_pbar.set_postfix_str(f"Testing: {combo_name}")
+        combo_pbar.set_postfix_str(f"Features: {combo_name}")
 
         # Load dataset with specific feature combination
         _, data = load_dataset("email", data_dir, email_features=combo)
@@ -636,6 +662,7 @@ def benchmark_email_feature_combinations(
         all_results[combo_name] = combo_results
         combo_pbar.update(1)
 
+    combo_pbar.set_postfix_str("COMPLETE")
     combo_pbar.close()
 
     # Save aggregated results
@@ -644,6 +671,17 @@ def benchmark_email_feature_combinations(
     results_path = os.path.join(output_dir, f"email_features_benchmark_{timestamp}.json")
     with open(results_path, 'w') as f:
         json.dump(all_results, f, indent=2)
+
+    # Print final results summary
+    print("\n" + "=" * 80)
+    print("[FINAL RESULTS - EMAIL FEATURE COMBINATIONS]")
+    print("=" * 80)
+    for combo_name, combo_results in all_results.items():
+        print(f"\n[{combo_name}]")
+        for model_name, model_results in combo_results.items():
+            if isinstance(model_results, dict) and "accuracy_mean" in model_results:
+                print(f"  {model_name}: Acc={model_results['accuracy_mean']:.4f} (+/- {model_results['accuracy_std']:.4f})")
+    print("=" * 80)
 
     if verbose:
         print(f"\nAll results saved to: {results_path}")
@@ -676,14 +714,13 @@ def benchmark_all_datasets(
         Dictionary with all benchmark results.
     """
     datasets = ["amazon", "dblp", "email"]
+    models = models or ["gcn", "gat", "sage", "ppnp", "appnp"]
     all_results = {}
 
-    # Progress bar for datasets
-    dataset_pbar = tqdm(total=len(datasets), desc="Datasets", bar_format="{l_bar}{bar}| {postfix}")
+    # Outer progress bar for datasets
+    dataset_pbar = tqdm(total=len(datasets), desc="[Benchmark All]", bar_format="{desc} |{bar}| {postfix}", ncols=100, position=0)
 
-    for dataset_name in datasets:
-        dataset_pbar.set_postfix_str(f"Testing: {dataset_name.upper()}")
-
+    for dataset_idx, dataset_name in enumerate(datasets):
         # Load dataset
         _, data = load_dataset(dataset_name, data_dir)
         data = create_masks(data) if not hasattr(data, 'train_mask') else data
@@ -693,25 +730,93 @@ def benchmark_all_datasets(
         if verbose:
             print(f"\nDataset stats: {stats}")
 
-        # Benchmark
-        dataset_results = benchmark_all_models(
-            dataset_name=dataset_name,
-            data=data,
-            models=models,
-            epochs=epochs,
-            n_runs=n_runs,
-            device=device,
-            output_dir=output_dir,
-            verbose=verbose,
-        )
+        dataset_pbar.set_postfix_str(f"Dataset: {dataset_name}")
 
-        all_results[dataset_name] = {
-            "stats": stats,
-            "benchmark": dataset_results,
-        }
+        # Inner progress bar for models
+        model_pbar = tqdm(total=len(models), desc=f"  [{dataset_name}]", bar_format="{desc} |{bar}| {postfix}", ncols=100, position=1)
+
+        for model_name in models:
+            # Default hyperparameters
+            default_hyperparams = {
+                "hidden_channels": 128,
+                "num_layers": 2,
+                "dropout": 0.5,
+                "norm": "layer",
+                "lr": 0.01,
+                "weight_decay": 5e-4,
+            }
+
+            model_results = {"accuracy": [], "f1_score": [], "configs": []}
+
+            # Innermost progress bar for runs
+            run_pbar = tqdm(total=n_runs, desc=f"    [{model_name}] - Config(default)", bar_format="{desc} |{bar}| {postfix}", ncols=100, position=2)
+
+            for run in range(n_runs):
+                seed = 42 + run
+                seed_everything(seed)
+                data_run = create_masks(data, seed=seed) if not hasattr(data, 'train_mask') else data
+
+                hyperparams_for_run = {**default_hyperparams}
+                # Note: hyperparams override not supported in benchmark_all_datasets mode
+
+                try:
+                    _, test_metrics, _ = train_single_config(
+                        model_name=model_name,
+                        dataset_name=dataset_name,
+                        data=data_run,
+                        hyperparams=hyperparams_for_run,
+                        epochs=epochs,
+                        device=device,
+                        verbose=False,
+                    )
+
+                    model_results["accuracy"].append(test_metrics["accuracy"])
+                    model_results["f1_score"].append(test_metrics["f1_score"])
+                    model_results["configs"].append(hyperparams_for_run)
+
+                    run_pbar.set_postfix_str(f"R{run+1}: Acc={test_metrics['accuracy']:.4f}")
+                    run_pbar.update(1)
+
+                except Exception as e:
+                    run_pbar.set_postfix_str(f"R{run+1}: Failed - {str(e)[:30]}")
+                    run_pbar.update(1)
+                    if verbose:
+                        print(f"  Run failed: {e}")
+
+            run_pbar.close()
+
+            # Store results for this model
+            if model_results["accuracy"]:
+                if dataset_name not in all_results:
+                    all_results[dataset_name] = {"stats": stats, "benchmark": {}}
+                all_results[dataset_name]["benchmark"][model_name] = {
+                    "accuracy_mean": float(np.mean(model_results["accuracy"])),
+                    "accuracy_std": float(np.std(model_results["accuracy"])),
+                    "f1_mean": float(np.mean(model_results["f1_score"])),
+                    "f1_std": float(np.std(model_results["f1_score"])),
+                    "runs": n_runs,
+                    "individual_runs": model_results,
+                }
+                model_pbar.set_postfix_str(f"{model_name}: Acc={all_results[dataset_name]['benchmark'][model_name]['accuracy_mean']:.4f}")
+                model_pbar.update(1)
+
+        model_pbar.close()
         dataset_pbar.update(1)
 
+    dataset_pbar.set_postfix_str("COMPLETE")
     dataset_pbar.close()
+
+    # Print final results summary
+    print("\n" + "=" * 80)
+    print("[FINAL RESULTS]")
+    print("=" * 80)
+    for dataset_name, dataset_results in all_results.items():
+        print(f"\n[{dataset_name.upper()}]")
+        benchmark = dataset_results.get("benchmark", dataset_results)
+        for model_name, model_results in benchmark.items():
+            if isinstance(model_results, dict) and "accuracy_mean" in model_results:
+                print(f"  {model_name}: Acc={model_results['accuracy_mean']:.4f} (+/- {model_results['accuracy_std']:.4f})")
+    print("=" * 80)
 
     # Save aggregated results
     os.makedirs(output_dir, exist_ok=True)
@@ -889,8 +994,13 @@ def main():
             wandb_kwargs=wandb_kwargs,
         )
 
-        print(f"\nTest Accuracy: {test_metrics['accuracy']:.4f}")
+        # Print final results summary
+        print("\n" + "=" * 60)
+        print(f"[FINAL RESULTS - Training: {args.model} on {args.dataset}]")
+        print("=" * 60)
+        print(f"Test Accuracy: {test_metrics['accuracy']:.4f}")
         print(f"Test F1 Score: {test_metrics['f1_score']:.4f}")
+        print("=" * 60)
 
         # Save outputs
         if args.save_history_json or args.save_learning_curves:
@@ -967,10 +1077,7 @@ def main():
             output_dir=args.output_dir,
             verbose=args.verbose,
         )
-
-        print("\nBenchmark Summary:")
-        for model_name, model_results in results.items():
-            print(f"  {model_name}: Acc={model_results['accuracy_mean']:.4f} (+/- {model_results['accuracy_std']:.4f})")
+        # Final results already printed in benchmark_all_models
 
     elif args.mode == "benchmark_email_features":
         # Benchmark all feature combinations on Email-Eu-Core
@@ -986,6 +1093,7 @@ def main():
             output_dir=args.output_dir,
             verbose=args.verbose,
         )
+        # Final results already printed in benchmark_email_feature_combinations
 
     elif args.mode == "benchmark_all":
         # Full benchmark across all datasets
@@ -1001,16 +1109,7 @@ def main():
             output_dir=args.output_dir,
             verbose=args.verbose,
         )
-
-        print("\n" + "="*60)
-        print("FINAL SUMMARY")
-        print("="*60)
-        for dataset_name, dataset_results in results.items():
-            print(f"\n{dataset_name.upper()}:")
-            benchmark = dataset_results.get("benchmark", dataset_results)
-            for model_name, model_results in benchmark.items():
-                if isinstance(model_results, dict) and "accuracy_mean" in model_results:
-                    print(f"  {model_name}: Acc={model_results['accuracy_mean']:.4f} (+/- {model_results['accuracy_std']:.4f})")
+        # Final results already printed in benchmark_all_datasets
 
 
 if __name__ == "__main__":

@@ -5,7 +5,8 @@
       "Bash(python -c \"from models import PPNPWrapper, APPNPWrapper; print\\('Import successful'\\)\")",
       "Bash(conda run:*)",
       "Bash(PYTHONPATH=/Users/mandakausthubh/ML_Research/GNN conda run -n GNN python utils/example.py --dataset email --email-feature-mode degree --epochs 5 --hidden-channels 64 --num-layers 2)",
-      "Bash(PYTHONPATH=/Users/mandakausthubh/ML_Research/GNN conda run:*)"
+      "Bash(PYTHONPATH=/Users/mandakausthubh/ML_Research/GNN conda run:*)",
+      "Bash(python -m py_compile train.py)"
     ]
   }
 }
