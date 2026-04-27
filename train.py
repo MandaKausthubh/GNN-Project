@@ -502,7 +502,7 @@ def benchmark_all_models(
 
     # Outer progress bar for models
     if use_tqdm:
-        model_pbar = tqdm(total=len(models), desc=f"[{dataset_name}]", bar_format="{desc} |{bar}| {postfix}", ncols=100, position=0)
+        # model_pbar = tqdm(total=len(models), desc=f"[{dataset_name}]", bar_format="{desc} |{bar}| {postfix}", ncols=100, position=0)
 
     for model_idx, model_name in enumerate(models):
         if verbose:
@@ -574,11 +574,13 @@ def benchmark_all_models(
                 "individual_runs": model_results,
             }
             if use_tqdm:
-                model_pbar.set_postfix_str(f"{model_name}: Acc={acc_mean:.4f}(+/-{acc_std:.4f})")
-                model_pbar.update(1)
+                # model_pbar.set_postfix_str(f"{model_name}: Acc={acc_mean:.4f}(+/-{acc_std:.4f})")
+                # model_pbar.update(1)
+                pass
 
     if use_tqdm:
-        model_pbar.close()
+        # model_pbar.close()
+        pass
 
     # Save results
     os.makedirs(output_dir, exist_ok=True)
@@ -727,7 +729,7 @@ def benchmark_all_datasets(
     all_results = {}
 
     # Outer progress bar for datasets
-    dataset_pbar = tqdm(total=len(datasets), desc="[Benchmark All]", bar_format="{desc} |{bar}| {postfix}", ncols=100, position=0)
+    # dataset_pbar = tqdm(total=len(datasets), desc="[Benchmark All]", bar_format="{desc} |{bar}| {postfix}", ncols=100, position=0)
 
     for dataset_idx, dataset_name in enumerate(datasets):
         # Load dataset
@@ -739,10 +741,10 @@ def benchmark_all_datasets(
         if verbose:
             print(f"\nDataset stats: {stats}")
 
-        dataset_pbar.set_postfix_str(f"Dataset: {dataset_name}")
+        # dataset_pbar.set_postfix_str(f"Dataset: {dataset_name}")
 
         # Inner progress bar for models
-        model_pbar = tqdm(total=len(models), desc=f"  [{dataset_name}]", bar_format="{desc} |{bar}| {postfix}", ncols=100, position=1)
+        # model_pbar = tqdm(total=len(models), desc=f"  [{dataset_name}]", bar_format="{desc} |{bar}| {postfix}", ncols=100, position=1)
 
         for model_name in models:
             # Hyperparameter tuning phase
@@ -823,14 +825,14 @@ def benchmark_all_datasets(
                     "individual_runs": model_results,
                     "best_config": hyperparams_for_benchmark if tune_hyperparams else None,
                 }
-                model_pbar.set_postfix_str(f"{model_name}: Acc={all_results[dataset_name]['benchmark'][model_name]['accuracy_mean']:.4f}")
-                model_pbar.update(1)
+                # model_pbar.set_postfix_str(f"{model_name}: Acc={all_results[dataset_name]['benchmark'][model_name]['accuracy_mean']:.4f}")
+                # model_pbar.update(1)
 
-        model_pbar.close()
-        dataset_pbar.update(1)
+        # model_pbar.close()
+        # dataset_pbar.update(1)
 
-    dataset_pbar.set_postfix_str("COMPLETE")
-    dataset_pbar.close()
+    # dataset_pbar.set_postfix_str("COMPLETE")
+    # dataset_pbar.close()
 
     # Print final results summary
     print("\n" + "=" * 80)
