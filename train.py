@@ -723,7 +723,7 @@ def benchmark_all_datasets(
     all_results = {}
 
     # Outer progress bar for datasets
-    dataset_pbar = tqdm(total=len(datasets), desc="[Benchmark All]", bar_format="{desc} |{bar}| {postfix}", ncols=100, position=0)
+    # dataset_pbar = tqdm(total=len(datasets), desc="[Benchmark All]", bar_format="{desc} |{bar}| {postfix}", ncols=100, position=0)
 
     for dataset_idx, dataset_name in enumerate(datasets):
         # Load dataset
@@ -735,7 +735,7 @@ def benchmark_all_datasets(
         if verbose:
             print(f"\nDataset stats: {stats}")
 
-        dataset_pbar.set_postfix_str(f"Dataset: {dataset_name}")
+        # dataset_pbar.set_postfix_str(f"Dataset: {dataset_name}")
 
         # Inner progress bar for models
         model_pbar = tqdm(total=len(models), desc=f"  [{dataset_name}]", bar_format="{desc} |{bar}| {postfix}", ncols=100, position=1)
@@ -754,7 +754,7 @@ def benchmark_all_datasets(
             model_results = {"accuracy": [], "f1_score": [], "configs": []}
 
             # Innermost progress bar for runs
-            run_pbar = tqdm(total=n_runs, desc=f"    [{model_name}] - Config(default)", bar_format="{desc} |{bar}| {postfix}", ncols=100, position=2)
+            # run_pbar = tqdm(total=n_runs, desc=f"    [{model_name}] - Config(default)", bar_format="{desc} |{bar}| {postfix}", ncols=100, position=2)
 
             for run in range(n_runs):
                 seed = 42 + run
@@ -779,16 +779,16 @@ def benchmark_all_datasets(
                     model_results["f1_score"].append(test_metrics["f1_score"])
                     model_results["configs"].append(hyperparams_for_run)
 
-                    run_pbar.set_postfix_str(f"R{run+1}: Acc={test_metrics['accuracy']:.4f}")
-                    run_pbar.update(1)
+                    # run_pbar.set_postfix_str(f"R{run+1}: Acc={test_metrics['accuracy']:.4f}")
+                    # run_pbar.update(1)
 
                 except Exception as e:
-                    run_pbar.set_postfix_str(f"R{run+1}: Failed - {str(e)[:30]}")
-                    run_pbar.update(1)
+                    # run_pbar.set_postfix_str(f"R{run+1}: Failed - {str(e)[:30]}")
+                    # run_pbar.update(1)
                     if verbose:
                         print(f"  Run failed: {e}")
 
-            run_pbar.close()
+            # run_pbar.close()
 
             # Store results for this model
             if model_results["accuracy"]:
@@ -806,10 +806,10 @@ def benchmark_all_datasets(
                 model_pbar.update(1)
 
         model_pbar.close()
-        dataset_pbar.update(1)
+        # dataset_pbar.update(1)
 
-    dataset_pbar.set_postfix_str("COMPLETE")
-    dataset_pbar.close()
+    # dataset_pbar.set_postfix_str("COMPLETE")
+    # dataset_pbar.close()
 
     # Print final results summary
     print("\n" + "=" * 80)
