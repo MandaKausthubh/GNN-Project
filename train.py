@@ -287,6 +287,8 @@ def train_single_config(
         optimizer, mode="min", factor=0.5, patience=10, min_lr=1e-5
     )
 
+    print(f"Training {model_name.upper()} on {dataset_name} with hyperparameters: {hyperparams}")
+
     trainer = Trainer(
         model=model,
         optimizer=optimizer,
@@ -304,7 +306,7 @@ def train_single_config(
         epochs=epochs,
         val_every=1,
         print_every=epochs if not verbose else 10,
-        use_tqdm=False,  # Disable inner tqdm - outer pbar handles progress
+        use_tqdm=True,
     )
 
     # Final evaluation
@@ -378,7 +380,7 @@ def hyperparameter_search(
     all_results = []
 
     # Create progress bar for hyperparameter search
-    pbar = tqdm(total=len(all_configs), desc=f"[{dataset_name}] - [{model_name}]", bar_format="{desc} |{bar}| {postfix}", ncols=100)
+    # pbar = tqdm(total=len(all_configs), desc=f"[{dataset_name}] - [{model_name}]", bar_format="{desc} |{bar}| {postfix}", ncols=100)
 
     for i, config in enumerate(all_configs):
         config_str = f"hid={config.get('hidden_channels', '?')},layers={config.get('num_layers', '?')},lr={config.get('lr', '?')}"
@@ -417,20 +419,22 @@ def hyperparameter_search(
                     device=device,
                     verbose=False,
                 )
-                pbar.set_postfix_str(f"Cfg-{i+1}: {config_str} | {val_metric}={val_score:.4f} (BEST)")
+                # pbar.set_postfix_str(f"Cfg-{i+1}: {config_str} | {val_metric}={val_score:.4f} (BEST)")
             else:
-                pbar.set_postfix_str(f"Cfg-{i+1}: {config_str} | {val_metric}={val_score:.4f}")
+                # pbar.set_postfix_str(f"Cfg-{i+1}: {config_str} | {val_metric}={val_score:.4f}")
+                pass
 
         except Exception as e:
-            pbar.set_postfix_str(f"Cfg-{i+1}: {config_str} | FAILED: {str(e)[:30]}")
+            # pbar.set_postfix_str(f"Cfg-{i+1}: {config_str} | FAILED: {str(e)[:30]}")
             if verbose:
                 print(f"  -> Failed: {e}")
             continue
         finally:
-            pbar.update(1)
+            # pbar.update(1)
+            pass
 
-    pbar.set_postfix_str(f"Best: {val_metric}={best_val_score:.4f} | Config: {best_config}")
-    pbar.close()
+    # pbar.set_postfix_str(f"Best: {val_metric}={best_val_score:.4f} | Config: {best_config}")
+    # pbar.close()
 
     # Print final results summary
     print("\n" + "=" * 60)
@@ -657,6 +661,7 @@ def benchmark_email_feature_combinations(
             device=device,
             output_dir=output_dir,
             verbose=verbose,
+            use_tqdm=False,
         )
 
         all_results[combo_name] = combo_results
@@ -1076,6 +1081,7 @@ def main():
             device=device,
             output_dir=args.output_dir,
             verbose=args.verbose,
+            use_tqdm=False,
         )
         # Final results already printed in benchmark_all_models
 
