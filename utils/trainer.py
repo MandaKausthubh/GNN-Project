@@ -199,6 +199,7 @@ class Trainer:
         epochs: int,
         val_every: int = 1,
         print_every: int = 10,
+        use_tqdm: bool = True,
     ) -> Dict[str, List[float]]:
         """
         Full training loop.
@@ -207,11 +208,16 @@ class Trainer:
             data: PyG Data object with train_mask, val_mask, and optionally test_mask.
             epochs: Number of training epochs.
             val_every: Validate every N epochs.
-            print_every: Print progress every N epochs.
+            print_every: Print progress every N epochs (when not using tqdm).
+            use_tqdm: Whether to use tqdm progress bar.
 
         Returns:
             Training history dictionary.
         """
+        # Create progress bar
+        if use_tqdm:
+            pbar = tqdm(total=epochs, desc="Training", bar_format="{l_bar}{bar}| {postfix}")
+
         for epoch in range(1, epochs + 1):
             train_loss, train_acc, train_f1 = self.train_epoch(data)
             current_lr = self.optimizer.param_groups[0]["lr"]
@@ -240,12 +246,14 @@ class Trainer:
                         self.epochs_without_improvement += 1
 
                     if self.epochs_without_improvement >= self.early_stopping_patience:
+                        if use_tqdm:
+                            pbar.set_postfix_str(f"Early stop | Val Loss: {val_loss:.4f}")
+                            pbar.close()
                         print(f"Early stopping at epoch {epoch}")
                         break
 
             # Scheduler step
             if self.scheduler is not None:
-                # ReduceLROnPlateau requires a metric, others don't
                 if isinstance(self.scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
                     self.scheduler.step(val_loss)
                 else:
@@ -266,10 +274,26 @@ class Trainer:
                     log_dict["val/f1"] = val_f1
                 self._wandb.log(log_dict)
 
-            # Print progress
-            if epoch % print_every == 0 or epoch == 1:
-                val_str = f"| Val: {val_acc:.4f}" if should_validate else ""
-                print(f"Epoch {epoch:3d}/{epochs} | Loss: {train_loss:.4f} | Acc: {train_acc:.4f} {val_str}")
+            # Update progress bar
+            if use_tqdm:
+                postfix_parts = [
+                    f"Train Loss: {train_loss:.4f}",
+                    f"Train Acc: {train_acc:.4f}",
+                ]
+                if should_validate:
+                    postfix_parts.extend([
+                        f"Val Loss: {val_loss:.4f}",
+                        f"Val Acc: {val_acc:.4f}",
+                    ])
+                pbar.set_postfix_str(" | ".join(postfix_parts))
+                pbar.update(1)
+            # Print progress (non-tqdm mode)
+            elif epoch % print_every == 0 or epoch == 1:
+                val_str = f"| Val Loss: {val_loss:.4f} | Val Acc: {val_acc:.4f}" if should_validate else ""
+                print(f"Epoch {epoch:3d}/{epochs} | Train Loss: {train_loss:.4f} | Train Acc: {train_acc:.4f} | LR: {current_lr:.2e} {val_str}")
+
+        if use_tqdm:
+            pbar.close()
 
         return self.history
 

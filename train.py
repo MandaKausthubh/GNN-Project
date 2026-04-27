@@ -25,6 +25,7 @@ import torch
 import torch.nn as nn
 from torch_geometric.data import Data
 from torch_geometric.seed import seed_everything
+from tqdm import tqdm
 
 from gnn_datasets import AmazonPhotos, EmailEuCore, DBLP
 from models import GCNWrapper, GATWrapper, SAGEWrapper, PPNPWrapper, APPNPWrapper
@@ -303,6 +304,7 @@ def train_single_config(
         epochs=epochs,
         val_every=1,
         print_every=epochs if not verbose else 10,
+        use_tqdm=not verbose,  # Use tqdm when not in verbose mode
     )
 
     # Final evaluation
@@ -375,10 +377,10 @@ def hyperparameter_search(
     best_test_metrics = None
     all_results = []
 
-    for i, config in enumerate(all_configs):
-        if verbose:
-            print(f"\nTrial {i+1}/{len(all_configs)}: {config}")
+    # Create progress bar for hyperparameter search
+    pbar = tqdm(total=len(all_configs), desc="Hyperparameter Search", bar_format="{l_bar}{bar}| {postfix}")
 
+    for i, config in enumerate(all_configs):
         try:
             _, val_metrics, _ = train_single_config(
                 model_name=model_name,
@@ -414,13 +416,19 @@ def hyperparameter_search(
                     device=device,
                     verbose=False,
                 )
-                if verbose:
-                    print(f"  -> New best! Val {val_metric}: {val_score:.4f}")
+                pbar.set_postfix_str(f"Best: {val_metric}={val_score:.4f} | Config: {config}")
+            else:
+                pbar.set_postfix_str(f"{val_metric}={val_score:.4f} (best: {best_val_score:.4f})")
 
         except Exception as e:
+            pbar.set_postfix_str(f"Failed: {e}")
             if verbose:
                 print(f"  -> Failed: {e}")
             continue
+        finally:
+            pbar.update(1)
+
+    pbar.close()
 
     return best_config, best_test_metrics, {"trials": all_results}
 
@@ -472,6 +480,9 @@ def benchmark_all_models(
 
     all_results = {}
 
+    # Create progress bar for models
+    model_pbar = tqdm(total=len(models), desc="Benchmarking", bar_format="{l_bar}{bar}| {postfix}")
+
     for model_name in models:
         if verbose:
             print(f"\n{'='*60}")
@@ -484,10 +495,10 @@ def benchmark_all_models(
             "configs": [],
         }
 
-        for run in range(n_runs):
-            if verbose:
-                print(f"\nRun {run+1}/{n_runs}")
+        # Progress bar for runs
+        run_pbar = tqdm(total=n_runs, desc=f"{model_name}", leave=False, bar_format="{l_bar}{bar}| {postfix}")
 
+        for run in range(n_runs):
             # Add slight seed variation for each run
             seed = 42 + run
             seed_everything(seed)
@@ -514,24 +525,35 @@ def benchmark_all_models(
                 model_results["f1_score"].append(test_metrics["f1_score"])
                 model_results["configs"].append(hyperparams_for_run)
 
-                if verbose:
-                    print(f"  Accuracy: {test_metrics['accuracy']:.4f}, F1: {test_metrics['f1_score']:.4f}")
+                run_pbar.set_postfix_str(f"Acc={test_metrics['accuracy']:.4f}, F1={test_metrics['f1_score']:.4f}")
 
             except Exception as e:
+                run_pbar.set_postfix_str(f"Failed: {e}")
                 if verbose:
                     print(f"  Run failed: {e}")
                 continue
+            finally:
+                run_pbar.update(1)
+
+        run_pbar.close()
 
         # Compute statistics
         if model_results["accuracy"]:
+            acc_mean = float(np.mean(model_results["accuracy"]))
+            acc_std = float(np.std(model_results["accuracy"]))
             all_results[model_name] = {
-                "accuracy_mean": float(np.mean(model_results["accuracy"])),
-                "accuracy_std": float(np.std(model_results["accuracy"])),
+                "accuracy_mean": acc_mean,
+                "accuracy_std": acc_std,
                 "f1_mean": float(np.mean(model_results["f1_score"])),
                 "f1_std": float(np.std(model_results["f1_score"])),
                 "runs": n_runs,
                 "individual_runs": model_results,
             }
+            model_pbar.set_postfix_str(f"{model_name}: Acc={acc_mean:.4f} (+/- {acc_std:.4f})")
+
+        model_pbar.update(1)
+
+    model_pbar.close()
 
     # Save results
     os.makedirs(output_dir, exist_ok=True)
@@ -588,12 +610,12 @@ def benchmark_email_feature_combinations(
     models = models or ["gcn", "gat", "sage"]
     all_results = {}
 
+    # Progress bar for feature combinations
+    combo_pbar = tqdm(total=len(feature_combos), desc="Feature Combos", bar_format="{l_bar}{bar}| {postfix}")
+
     for combo in feature_combos:
         combo_name = "_".join([k.replace("use_", "") for k, v in combo.items() if v])
-        if verbose:
-            print(f"\n{'='*60}")
-            print(f"Feature combination: {combo_name}")
-            print(f"{'='*60}")
+        combo_pbar.set_postfix_str(f"Testing: {combo_name}")
 
         # Load dataset with specific feature combination
         _, data = load_dataset("email", data_dir, email_features=combo)
@@ -612,6 +634,9 @@ def benchmark_email_feature_combinations(
         )
 
         all_results[combo_name] = combo_results
+        combo_pbar.update(1)
+
+    combo_pbar.close()
 
     # Save aggregated results
     os.makedirs(output_dir, exist_ok=True)
@@ -653,11 +678,11 @@ def benchmark_all_datasets(
     datasets = ["amazon", "dblp", "email"]
     all_results = {}
 
+    # Progress bar for datasets
+    dataset_pbar = tqdm(total=len(datasets), desc="Datasets", bar_format="{l_bar}{bar}| {postfix}")
+
     for dataset_name in datasets:
-        if verbose:
-            print(f"\n{'#'*60}")
-            print(f"# BENCHMARKING {dataset_name.upper()}")
-            print(f"{'#'*60}")
+        dataset_pbar.set_postfix_str(f"Testing: {dataset_name.upper()}")
 
         # Load dataset
         _, data = load_dataset(dataset_name, data_dir)
@@ -684,6 +709,9 @@ def benchmark_all_datasets(
             "stats": stats,
             "benchmark": dataset_results,
         }
+        dataset_pbar.update(1)
+
+    dataset_pbar.close()
 
     # Save aggregated results
     os.makedirs(output_dir, exist_ok=True)
