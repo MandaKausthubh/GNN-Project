@@ -3,7 +3,7 @@ Email-Eu-Core dataset wrapper.
 Wraps PyTorch Geometric's EmailEUCore dataset.
 """
 
-from typing import Optional, Callable, Literal
+from typing import Optional, Callable
 
 import torch
 from torch import Tensor
@@ -27,11 +27,10 @@ class EmailEuCore(SingleGraphWrapper):
         transform: Transform to apply to each graph.
         pre_transform: Transform to apply once before loading.
         force_reload: Force reload of cached data.
-        feature_mode: Feature mode for ablation studies:
-            - "none": Use original node features (department labels as input)
-            - "degree": Degree-based features (in_degree, out_degree, total_degree, log_total_degree)
-            - "centrality": Centrality-based features (betweenness, closeness, pagerank, eigenvector)
-            - "local": Local structure features (clustering_coef, triangle_count, k_core_number)
+        use_degree: Use degree-based features (in_degree, out_degree, total_degree, log_total_degree)
+        use_centrality: Use centrality-based features (betweenness, closeness, pagerank, eigenvector)
+        use_local: Use local structure features (clustering_coef, triangle_count, k_core_number)
+        use_original: Use original node features (department labels as input)
 
     Statistics:
         - Nodes: ~986
@@ -47,9 +46,15 @@ class EmailEuCore(SingleGraphWrapper):
         transform: Optional[Callable] = None,
         pre_transform: Optional[Callable] = None,
         force_reload: bool = False,
-        feature_mode: Literal["none", "degree", "centrality", "local"] = "none",
+        use_degree: bool = False,
+        use_centrality: bool = False,
+        use_local: bool = False,
+        use_original: bool = True,
     ):
-        self.feature_mode = feature_mode
+        self.use_degree = use_degree
+        self.use_centrality = use_centrality
+        self.use_local = use_local
+        self.use_original = use_original
         self._cached_data = None
         super().__init__(
             root=root,
@@ -67,7 +72,7 @@ class EmailEuCore(SingleGraphWrapper):
         )
 
     def _get_data(self, idx: int):
-        """Get graph data from underlying EmailEUCore dataset with selected feature mode."""
+        """Get graph data from underlying EmailEUCore dataset with selected feature modes."""
         if idx != 0:
             raise IndexError(f"Index {idx} out of range")
 
@@ -77,29 +82,51 @@ class EmailEuCore(SingleGraphWrapper):
 
         data = self._dataset[0]
 
-        # Apply feature mode
-        if self.feature_mode != "none":
-            data = self._apply_feature_mode(data, self.feature_mode)
+        # Apply feature modes
+        data = self._combine_features(data)
 
         self._cached_data = data
         return data
 
-    def _apply_feature_mode(self, data, mode: str):
-        """Apply feature mode to generate ablation features."""
+    def _combine_features(self, data):
+        """Combine selected feature modes by concatenation."""
         from torch_geometric.data import Data
 
         # Ensure undirected graph for feature computation
         edge_index = to_undirected(data.edge_index)
         num_nodes = data.num_nodes
 
-        if mode == "degree":
-            x = self._compute_degree_features(edge_index, num_nodes)
-        elif mode == "centrality":
-            x = self._compute_centrality_features(edge_index, num_nodes)
-        elif mode == "local":
-            x = self._compute_local_features(edge_index, num_nodes)
+        feature_list = []
+
+        # Add original features if requested
+        if self.use_original:
+            if data.x is not None:
+                feature_list.append(data.x.float())
+            else:
+                # Fallback to identity matrix
+                feature_list.append(torch.eye(num_nodes, dtype=torch.float))
+
+        # Add degree features if requested
+        if self.use_degree:
+            degree_feat = self._compute_degree_features(edge_index, num_nodes)
+            feature_list.append(degree_feat)
+
+        # Add centrality features if requested
+        if self.use_centrality:
+            centrality_feat = self._compute_centrality_features(edge_index, num_nodes)
+            feature_list.append(centrality_feat)
+
+        # Add local features if requested
+        if self.use_local:
+            local_feat = self._compute_local_features(edge_index, num_nodes)
+            feature_list.append(local_feat)
+
+        # Concatenate all selected features
+        if feature_list:
+            x = torch.cat(feature_list, dim=1)
         else:
-            return data
+            # If nothing selected, use identity
+            x = torch.eye(num_nodes, dtype=torch.float)
 
         # Preserve labels and masks
         new_data = Data(

@@ -171,11 +171,46 @@ def main():
         help="Wandb run name (default: auto-generated)",
     )
     parser.add_argument(
-        "--email-feature-mode",
+        "--email-use-degree",
+        action="store_true",
+        default=False,
+        help="Use degree-based features for EmailEuCore",
+    )
+    parser.add_argument(
+        "--email-use-centrality",
+        action="store_true",
+        default=False,
+        help="Use centrality-based features for EmailEuCore",
+    )
+    parser.add_argument(
+        "--email-use-local",
+        action="store_true",
+        default=False,
+        help="Use local structure features for EmailEuCore",
+    )
+    parser.add_argument(
+        "--email-use-original",
+        action="store_true",
+        default=True,
+        help="Use original node features for EmailEuCore (default: True)",
+    )
+    parser.add_argument(
+        "--save-history-json",
+        action="store_true",
+        default=False,
+        help="Save training history to JSON file",
+    )
+    parser.add_argument(
+        "--save-learning-curves",
+        action="store_true",
+        default=False,
+        help="Save learning curve plots as PNG",
+    )
+    parser.add_argument(
+        "--output-dir",
         type=str,
-        choices=["none", "degree", "centrality", "local"],
-        default="none",
-        help="Feature mode for EmailEuCore ablation studies (default: none)",
+        default="./outputs",
+        help="Output directory for plots and JSON (default: ./outputs)",
     )
 
     args = parser.parse_args()
@@ -201,7 +236,13 @@ def main():
     print(f"  Early stopping: {args.early_stopping}")
     print(f"  Wandb enabled: {args.wandb}")
     if args.dataset == "email":
-        print(f"  Email feature mode: {args.email_feature_mode}")
+        print(f"  Email features:")
+        print(f"    - Degree: {args.email_use_degree}")
+        print(f"    - Centrality: {args.email_use_centrality}")
+        print(f"    - Local: {args.email_use_local}")
+        print(f"    - Original: {args.email_use_original}")
+    if args.save_history_json or args.save_learning_curves:
+        print(f"  Output directory: {args.output_dir}")
     print()
 
     # Load dataset
@@ -222,10 +263,24 @@ def main():
     elif args.dataset == "email":
         dataset = EmailEuCore(
             root=os.path.join(args.data_dir, "EmailEuCore"),
-            feature_mode=args.email_feature_mode,
+            use_degree=args.email_use_degree,
+            use_centrality=args.email_use_centrality,
+            use_local=args.email_use_local,
+            use_original=args.email_use_original,
         )
-        if args.email_feature_mode != "none":
-            print(f"Using EmailEuCore with {args.email_feature_mode} features (ablation mode)")
+        feature_modes = []
+        if args.email_use_degree:
+            feature_modes.append("degree")
+        if args.email_use_centrality:
+            feature_modes.append("centrality")
+        if args.email_use_local:
+            feature_modes.append("local")
+        if args.email_use_original:
+            feature_modes.append("original")
+        if feature_modes:
+            print(f"Using EmailEuCore with combined features: {', '.join(feature_modes)}")
+        else:
+            print("Using EmailEuCore with no additional features (original only)")
     else:
         raise ValueError(f"Unknown dataset: {args.dataset}")
 
@@ -380,6 +435,22 @@ def main():
     os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
     trainer.save_checkpoint(checkpoint_path)
     print(f"\nCheckpoint saved to: {checkpoint_path}")
+
+    # Save training history to JSON
+    if args.save_history_json:
+        json_path = os.path.join(
+            args.output_dir,
+            f"{args.model}_{args.dataset}_history.json"
+        )
+        trainer.save_history_to_json(json_path)
+
+    # Save learning curves plot
+    if args.save_learning_curves:
+        plot_path = os.path.join(
+            args.output_dir,
+            f"{args.model}_{args.dataset}_learning_curves.png"
+        )
+        trainer.plot_learning_curves(save_path=plot_path)
 
     print("\nDone!")
 

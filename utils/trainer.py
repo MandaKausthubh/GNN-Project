@@ -4,6 +4,7 @@ Training and inference utilities with full wandb support.
 
 import os
 import copy
+import json
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import torch
@@ -355,6 +356,98 @@ class Trainer:
         if self.scheduler is not None and "scheduler_state_dict" in checkpoint:
             self.scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
         return checkpoint.get("epoch", 0)
+
+    def save_history_to_json(self, path: str):
+        """
+        Save training history to a JSON file for later analysis.
+
+        Args:
+            path: Path to save the JSON file.
+        """
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, 'w') as f:
+            json.dump(self.history, f, indent=2)
+        print(f"Training history saved to: {path}")
+
+    def plot_learning_curves(
+        self,
+        save_path: Optional[str] = None,
+        show: bool = False,
+        dpi: int = 150,
+        figsize: Tuple[int, int] = (12, 5),
+    ):
+        """
+        Plot learning curves for training and validation metrics using matplotlib.
+
+        Args:
+            save_path: Path to save the plot. If None, plot is not saved.
+            show: Whether to display the plot.
+            dpi: DPI for saved figure.
+            figsize: Figure size tuple (width, height).
+        """
+        try:
+            import matplotlib.pyplot as plt
+        except ImportError:
+            print("matplotlib not installed. Install with: pip install matplotlib")
+            return
+
+        fig, axes = plt.subplots(1, 3, figsize=figsize)
+        fig.tight_layout(pad=3.0)
+
+        num_train_epochs = len(self.history['train_loss'])
+        num_val_epochs = len(self.history['val_loss'])
+
+        # Calculate validation epoch indices (validation happens every N training epochs)
+        val_indices = []
+        if num_val_epochs > 0:
+            val_frequency = num_train_epochs // num_val_epochs
+            val_indices = list(range(val_frequency - 1, num_train_epochs, val_frequency))
+            if len(val_indices) > num_val_epochs:
+                val_indices = val_indices[:num_val_epochs]
+            elif len(val_indices) < num_val_epochs:
+                val_indices = list(range(0, num_train_epochs, max(1, num_train_epochs // num_val_epochs)))[:num_val_epochs]
+
+        # Loss plot
+        axes[0].plot(range(1, num_train_epochs + 1), self.history['train_loss'], 'b-', label='Train Loss', linewidth=2)
+        if num_val_epochs > 0:
+            axes[0].plot(val_indices, self.history['val_loss'], 'r--', label='Val Loss', linewidth=2)
+        axes[0].set_xlabel('Epoch')
+        axes[0].set_ylabel('Loss')
+        axes[0].set_title('Training and Validation Loss')
+        axes[0].legend()
+        axes[0].grid(True, alpha=0.3)
+
+        # Accuracy plot
+        axes[1].plot(range(1, num_train_epochs + 1), self.history['train_acc'], 'b-', label='Train Acc', linewidth=2)
+        if num_val_epochs > 0:
+            axes[1].plot(val_indices, self.history['val_acc'], 'r--', label='Val Acc', linewidth=2)
+        axes[1].set_xlabel('Epoch')
+        axes[1].set_ylabel('Accuracy')
+        axes[1].set_title('Training and Validation Accuracy')
+        axes[1].legend()
+        axes[1].grid(True, alpha=0.3)
+
+        # F1 Score plot
+        axes[2].plot(range(1, num_train_epochs + 1), self.history['train_f1'], 'b-', label='Train F1', linewidth=2)
+        if num_val_epochs > 0:
+            axes[2].plot(val_indices, self.history['val_f1'], 'r--', label='Val F1', linewidth=2)
+        axes[2].set_xlabel('Epoch')
+        axes[2].set_ylabel('F1 Score')
+        axes[2].set_title('Training and Validation F1 Score')
+        axes[2].legend()
+        axes[2].grid(True, alpha=0.3)
+
+        plt.tight_layout()
+
+        if save_path:
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            plt.savefig(save_path, dpi=dpi, bbox_inches='tight')
+            print(f"Learning curves saved to: {save_path}")
+
+        if show:
+            plt.show()
+
+        plt.close()
 
     def __repr__(self) -> str:
         if type(self.model) == ResidualGNNWrapper:
