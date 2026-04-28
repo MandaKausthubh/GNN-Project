@@ -500,6 +500,8 @@ def benchmark_all_models(
     output_dir: str = "./outputs",
     verbose: bool = False,
     use_tqdm: bool = True,
+    save_history: bool = False,
+    save_curves: bool = False,
 ) -> Dict[str, Any]:
     """
     Benchmark all specified models on a dataset.
@@ -515,6 +517,8 @@ def benchmark_all_models(
         output_dir: Directory for saving results.
         verbose: Print progress.
         use_tqdm: Whether to use tqdm progress bar.
+        save_history: Whether to save training history as JSON.
+        save_curves: Whether to save learning curve plots.
 
     Returns:
         Dictionary with benchmark results.
@@ -550,6 +554,8 @@ def benchmark_all_models(
             "accuracy": [],
             "f1_score": [],
             "configs": [],
+            "histories": [],
+            "models": [],
         }
 
         # Inner progress bar for runs
@@ -569,7 +575,7 @@ def benchmark_all_models(
                 hyperparams_for_run.update(hyperparams[model_name])
 
             try:
-                _, test_metrics, _ = train_single_config(
+                history, test_metrics, model = train_single_config(
                     model_name=model_name,
                     dataset_name=dataset_name,
                     data=data_run,
@@ -582,6 +588,11 @@ def benchmark_all_models(
                 model_results["accuracy"].append(test_metrics["accuracy"])
                 model_results["f1_score"].append(test_metrics["f1_score"])
                 model_results["configs"].append(hyperparams_for_run)
+
+                # Save history and model if requested
+                if save_history or save_curves:
+                    model_results["histories"].append(history)
+                    model_results["models"].append(model)
 
                 if use_tqdm:
                     run_pbar.set_postfix_str(f"R{run+1}: Acc={test_metrics['accuracy']:.4f}, F1={test_metrics['f1_score']:.4f}")
@@ -647,6 +658,8 @@ def benchmark_email_feature_combinations(
     device: Optional[str] = None,
     output_dir: str = "./outputs",
     verbose: bool = False,
+    save_history: bool = False,
+    save_curves: bool = False,
 ) -> Dict[str, Any]:
     """
     Benchmark Email-Eu-Core with all feature combinations.
@@ -700,6 +713,8 @@ def benchmark_email_feature_combinations(
             output_dir=output_dir,
             verbose=verbose,
             use_tqdm=False,
+            save_history=save_history,
+            save_curves=save_curves,
         )
 
         all_results[combo_name] = combo_results
@@ -1162,6 +1177,30 @@ def main():
             }, f, indent=2)
         print(f"Results saved to: {results_path}")
 
+        # Save history and curves for tuning trials if requested
+        if args.save_history_json or args.save_learning_curves:
+            print("\nSaving history/curves for tuning trials...")
+            # Retrain best config to get history
+            history, _, model = train_single_config(
+                model_name=args.model,
+                dataset_name=args.dataset,
+                data=data,
+                hyperparams=best_config,
+                epochs=args.epochs,
+                device=device,
+                verbose=False,
+            )
+            if args.save_history_json:
+                json_path = os.path.join(args.output_dir, f"tuning_{args.model}_{args.dataset}_best_history.json")
+                temp_trainer = Trainer(model, torch.optim.Adam(model.parameters()))
+                temp_trainer.history = history
+                temp_trainer.save_history_to_json(json_path)
+            if args.save_learning_curves:
+                plot_path = os.path.join(args.output_dir, f"tuning_{args.model}_{args.dataset}_best_curves.png")
+                temp_trainer = Trainer(model, torch.optim.Adam(model.parameters()))
+                temp_trainer.history = history
+                temp_trainer.plot_learning_curves(save_path=plot_path)
+
     elif args.mode == "benchmark":
         # Benchmark specific models on specific dataset
         print(f"\nBenchmarking on {args.dataset}")
@@ -1180,6 +1219,8 @@ def main():
             output_dir=args.output_dir,
             verbose=args.verbose,
             use_tqdm=False,
+            save_history=args.save_history_json,
+            save_curves=args.save_learning_curves,
         )
         # Final results already printed in benchmark_all_models
 
@@ -1196,6 +1237,8 @@ def main():
             device=device,
             output_dir=args.output_dir,
             verbose=args.verbose,
+            save_history=args.save_history_json,
+            save_curves=args.save_learning_curves,
         )
         # Final results already printed in benchmark_email_feature_combinations
 
