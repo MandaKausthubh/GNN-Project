@@ -30,6 +30,10 @@ from tqdm import tqdm
 from gnn_datasets import AmazonPhotos, EmailEuCore, DBLP
 from models import GCNWrapper, GATWrapper, SAGEWrapper, PPNPWrapper, APPNPWrapper
 from utils import Trainer, ResidualGNNWrapper, ResidualAPPNPWrapper
+from utils.bayes_hp import (
+    get_bayesian_optimizer_for_model,
+    convert_bayesian_params_to_trainable,
+)
 
 
 # =============================================================================
@@ -323,7 +327,7 @@ def hyperparameter_search(
     model_name: str,
     dataset_name: str,
     data: Data,
-    search_type: str = "grid",
+    search_type: str = "bayesian",
     n_trials: int = 20,
     epochs: int = 100,
     val_metric: str = "accuracy",
@@ -337,8 +341,8 @@ def hyperparameter_search(
         model_name: Model architecture name.
         dataset_name: Dataset name.
         data: PyG Data object.
-        search_type: "grid" or "random".
-        n_trials: Number of trials (for random search).
+        search_type: "grid", "random", or "bayesian".
+        n_trials: Number of trials (for random/bayesian search).
         epochs: Training epochs per trial.
         val_metric: Metric to optimize ("accuracy" or "loss").
         device: Device to train on.
@@ -357,7 +361,7 @@ def hyperparameter_search(
         all_configs = [dict(zip(keys, v)) for v in product(*values)]
         if verbose:
             print(f"Grid search: {len(all_configs)} configurations")
-    else:
+    elif search_type == "random":
         # Random search
         all_configs = []
         for _ in range(n_trials):
@@ -373,16 +377,43 @@ def hyperparameter_search(
             all_configs.append(config)
         if verbose:
             print(f"Random search: {n_trials} trials")
+    elif search_type == "bayesian":
+        # Bayesian optimization - will generate configs iteratively
+        all_configs = None  # Generated on-the-fly
+        if verbose:
+            print(f"Bayesian optimization: {n_trials} trials")
+    else:
+        raise ValueError(f"Unknown search_type: {search_type}")
 
     best_val_score = -float("inf") if val_metric == "accuracy" else float("inf")
     best_config = None
     best_test_metrics = None
     all_results = []
 
-    # Create progress bar for hyperparameter search
-    # pbar = tqdm(total=len(all_configs), desc=f"[{dataset_name}] - [{model_name}]", bar_format="{desc} |{bar}| {postfix}", ncols=100)
+    # Bayesian optimizer (only used if search_type == "bayesian")
+    bayes_opt = None
+    if search_type == "bayesian":
+        bayes_opt = get_bayesian_optimizer_for_model(model_name)
 
-    for i, config in enumerate(all_configs):
+    # Iterative search for Bayesian, or sequential for grid/random
+    n_configs = n_trials if search_type in ("bayesian", "random") else len(all_configs)
+
+    for i in range(n_configs):
+        if search_type == "bayesian":
+            # Get next suggestion from Bayesian optimizer
+            raw_config = bayes_opt.suggest_next()
+            config = convert_bayesian_params_to_trainable(raw_config)
+            # Add model-specific params if needed
+            if model_name == "ppnp" and "alpha" not in config:
+                config["alpha"] = 0.1
+            if model_name == "appnp":
+                if "K" not in config:
+                    config["K"] = 10
+                if "alpha" not in config:
+                    config["alpha"] = 0.1
+        else:
+            config = all_configs[i]
+
         config_str = f"hid={config.get('hidden_channels', '?')},layers={config.get('num_layers', '?')},lr={config.get('lr', '?')}"
         try:
             _, val_metrics, _ = train_single_config(
@@ -405,6 +436,10 @@ def hyperparameter_search(
                 "val_metrics": val_metrics,
             }
             all_results.append(result)
+
+            # For Bayesian optimization, observe the result
+            if search_type == "bayesian":
+                bayes_opt.observe(raw_config, val_score)
 
             if is_better:
                 best_val_score = val_score
