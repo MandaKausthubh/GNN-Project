@@ -742,6 +742,8 @@ def benchmark_all_datasets(
     verbose: bool = False,
     tune_hyperparams: bool = True,
     n_trials: int = 10,
+    save_history: bool = False,
+    save_curves: bool = False,
 ) -> Dict[str, Any]:
     """
     Benchmark all models across all datasets with optional hyperparameter tuning.
@@ -756,6 +758,8 @@ def benchmark_all_datasets(
         verbose: Print progress.
         tune_hyperparams: Whether to perform hyperparameter tuning before benchmarking.
         n_trials: Number of trials for hyperparameter tuning (if enabled).
+        save_history: Whether to save training history as JSON.
+        save_curves: Whether to save learning curve plots.
 
     Returns:
         Dictionary with all benchmark results.
@@ -809,7 +813,7 @@ def benchmark_all_datasets(
                     "weight_decay": 5e-4,
                 }
 
-            model_results = {"accuracy": [], "f1_score": [], "configs": []}
+            model_results = {"accuracy": [], "f1_score": [], "configs": [], "histories": [], "models": []}
 
             # Innermost progress bar for runs
             config_summary = f"hid={hyperparams_for_benchmark.get('hidden_channels', '?')},layers={hyperparams_for_benchmark.get('num_layers', '?')},lr={hyperparams_for_benchmark.get('lr', '?')}"
@@ -823,7 +827,7 @@ def benchmark_all_datasets(
                 hyperparams_for_run = {**hyperparams_for_benchmark}
 
                 try:
-                    _, test_metrics, _ = train_single_config(
+                    history, test_metrics, model = train_single_config(
                         model_name=model_name,
                         dataset_name=dataset_name,
                         data=data_run,
@@ -837,6 +841,11 @@ def benchmark_all_datasets(
                     model_results["f1_score"].append(test_metrics["f1_score"])
                     model_results["configs"].append(hyperparams_for_run)
 
+                    # Save history and model if requested
+                    if save_history or save_curves:
+                        model_results["histories"].append(history)
+                        model_results["models"].append(model)
+
                     run_pbar.set_postfix_str(f"R{run+1}: Acc={test_metrics['accuracy']:.4f}")
                     run_pbar.update(1)
 
@@ -847,6 +856,24 @@ def benchmark_all_datasets(
                         print(f"  Run failed: {e}")
 
             run_pbar.close()
+
+            # Save history and learning curves for this model/dataset/run
+            if save_history or save_curves:
+                os.makedirs(output_dir, exist_ok=True)
+                for run_idx, (history, model) in enumerate(zip(model_results["histories"], model_results["models"])):
+                    base_name = f"{model_name}_{dataset_name}_run{run_idx+1}"
+
+                    if save_history:
+                        json_path = os.path.join(output_dir, f"{base_name}_history.json")
+                        temp_trainer = Trainer(model, torch.optim.Adam(model.parameters()))
+                        temp_trainer.history = history
+                        temp_trainer.save_history_to_json(json_path)
+
+                    if save_curves:
+                        plot_path = os.path.join(output_dir, f"{base_name}_curves.png")
+                        temp_trainer = Trainer(model, torch.optim.Adam(model.parameters()))
+                        temp_trainer.history = history
+                        temp_trainer.plot_learning_curves(save_path=plot_path)
 
             # Store results for this model
             if model_results["accuracy"]:
@@ -1188,6 +1215,8 @@ def main():
             verbose=args.verbose,
             tune_hyperparams=tune_mode,
             n_trials=args.n_trials,
+            save_history=args.save_history_json,
+            save_curves=args.save_learning_curves,
         )
         # Final results already printed in benchmark_all_datasets
 
