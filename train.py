@@ -629,12 +629,28 @@ def benchmark_all_models(
         # model_pbar.close()
         pass
 
-    # Save results
+    # Save results (exclude non-serializable model objects)
     os.makedirs(output_dir, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     results_path = os.path.join(output_dir, f"benchmark_{dataset_name}_{timestamp}.json")
+
+    # Create a serializable copy without model objects
+    serializable_results = {}
+    for model_name, model_results in all_results.items():
+        serializable_results[model_name] = {
+            k: v for k, v in model_results.items()
+            if k != "individual_runs" or not isinstance(v, dict)
+        }
+        if "individual_runs" in model_results:
+            runs = model_results["individual_runs"]
+            serializable_results[model_name]["individual_runs"] = {
+                "accuracy": runs["accuracy"],
+                "f1_score": runs["f1_score"],
+                "configs": runs["configs"],
+            }
+
     with open(results_path, 'w') as f:
-        json.dump(all_results, f, indent=2)
+        json.dump(serializable_results, f, indent=2)
 
     # Print final results summary
     print("\n" + "=" * 60)
