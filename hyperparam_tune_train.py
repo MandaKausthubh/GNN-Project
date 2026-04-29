@@ -390,10 +390,11 @@ def plot_comparison(
 
         for model in models_with_history:
             metrics = models_data[model]
-            history = metrics.get("history", {})
+            history = metrics.get("history") or {}
 
             # Get final validation accuracy from history
-            val_acc = history.get("val_acc", [0])[-1] if history.get("val_acc") else 0
+            val_acc_list = history.get("val_acc")
+            val_acc = val_acc_list[-1] if val_acc_list else 0
             test_acc = metrics.get("test_accuracy", 0)
 
             val_accs.append(val_acc)
@@ -459,9 +460,10 @@ def plot_comparison(
 
         for model in models_with_history:
             metrics = models_data[model]
-            history = metrics.get("history", {})
+            history = metrics.get("history") or {}
 
-            val_f1 = history.get("val_f1", [0])[-1] if history.get("val_f1") else 0
+            val_f1_list = history.get("val_f1")
+            val_f1 = val_f1_list[-1] if val_f1_list else 0
             test_f1 = metrics.get("test_f1_score", 0)
 
             val_f1s.append(val_f1)
