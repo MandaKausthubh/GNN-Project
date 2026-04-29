@@ -30,6 +30,11 @@ from tqdm import tqdm
 from gnn_datasets import AmazonPhotos, EmailEuCore, DBLP
 from models import GCNWrapper, GATWrapper, SAGEWrapper, PPNPWrapper, APPNPWrapper
 from utils import Trainer, ResidualGNNWrapper, ResidualAPPNPWrapper
+from utils import (
+    plot_tsne_from_model,
+    plot_training_time_per_epoch,
+    plot_training_time_summary,
+)
 from utils.bayes_hp import (
     get_bayesian_optimizer_for_model,
     convert_bayesian_params_to_trainable,
@@ -502,6 +507,8 @@ def benchmark_all_models(
     use_tqdm: bool = True,
     save_history: bool = False,
     save_curves: bool = False,
+    save_tsne: bool = False,
+    save_time_plots: bool = False,
 ) -> Dict[str, Any]:
     """
     Benchmark all specified models on a dataset.
@@ -519,6 +526,8 @@ def benchmark_all_models(
         use_tqdm: Whether to use tqdm progress bar.
         save_history: Whether to save training history as JSON.
         save_curves: Whether to save learning curve plots.
+        save_tsne: Whether to save t-SNE plots.
+        save_time_plots: Whether to save training time per epoch plots.
 
     Returns:
         Dictionary with benchmark results.
@@ -590,7 +599,7 @@ def benchmark_all_models(
                 model_results["configs"].append(hyperparams_for_run)
 
                 # Save history and model if requested
-                if save_history or save_curves:
+                if save_history or save_curves or save_tsne or save_time_plots:
                     model_results["histories"].append(history)
                     model_results["models"].append(model)
 
@@ -676,6 +685,8 @@ def benchmark_email_feature_combinations(
     verbose: bool = False,
     save_history: bool = False,
     save_curves: bool = False,
+    save_tsne: bool = False,
+    save_time_plots: bool = False,
 ) -> Dict[str, Any]:
     """
     Benchmark Email-Eu-Core with all feature combinations.
@@ -688,6 +699,10 @@ def benchmark_email_feature_combinations(
         device: Device to train on.
         output_dir: Output directory.
         verbose: Print progress.
+        save_history: Whether to save training history as JSON.
+        save_curves: Whether to save learning curve plots.
+        save_tsne: Whether to save t-SNE plots.
+        save_time_plots: Whether to save training time per epoch plots.
 
     Returns:
         Dictionary with all benchmark results.
@@ -731,6 +746,8 @@ def benchmark_email_feature_combinations(
             use_tqdm=False,
             save_history=save_history,
             save_curves=save_curves,
+            save_tsne=save_tsne,
+            save_time_plots=save_time_plots,
         )
 
         all_results[combo_name] = combo_results
@@ -793,6 +810,8 @@ def benchmark_all_datasets(
     n_trials: int = 10,
     save_history: bool = False,
     save_curves: bool = False,
+    save_tsne: bool = False,
+    save_time_plots: bool = False,
 ) -> Dict[str, Any]:
     """
     Benchmark all models across all datasets with optional hyperparameter tuning.
@@ -809,6 +828,8 @@ def benchmark_all_datasets(
         n_trials: Number of trials for hyperparameter tuning (if enabled).
         save_history: Whether to save training history as JSON.
         save_curves: Whether to save learning curve plots.
+        save_tsne: Whether to save t-SNE plots.
+        save_time_plots: Whether to save training time per epoch plots.
 
     Returns:
         Dictionary with all benchmark results.
@@ -907,7 +928,7 @@ def benchmark_all_datasets(
             run_pbar.close()
 
             # Save history and learning curves for this model/dataset/run
-            if save_history or save_curves:
+            if save_history or save_curves or save_tsne or save_time_plots:
                 os.makedirs(output_dir, exist_ok=True)
                 for run_idx, (history, model) in enumerate(zip(model_results["histories"], model_results["models"])):
                     base_name = f"{model_name}_{dataset_name}_run{run_idx+1}"
@@ -923,6 +944,20 @@ def benchmark_all_datasets(
                         temp_trainer = Trainer(model, torch.optim.Adam(model.parameters()))
                         temp_trainer.history = history
                         temp_trainer.plot_learning_curves(save_path=plot_path)
+
+                    if save_tsne:
+                        tsne_path = os.path.join(output_dir, f"{base_name}_tsne.png")
+                        plot_tsne_from_model(model, data, device, save_path=tsne_path,
+                                             title=f"t-SNE: {model_name.upper()} on {dataset_name}")
+
+                    if save_time_plots:
+                        time_path = os.path.join(output_dir, f"{base_name}_time.png")
+                        plot_training_time_summary(
+                            history.get("epoch_times", []),
+                            model_name=model_name,
+                            dataset_name=dataset_name,
+                            save_path=time_path
+                        )
 
             # Store results for this model
             if model_results["accuracy"]:
@@ -1075,6 +1110,10 @@ def main():
     )
     parser.add_argument("--save-history-json", action="store_true", default=False)
     parser.add_argument("--save-learning-curves", action="store_true", default=False)
+    parser.add_argument("--save-tsne-plots", action="store_true", default=False,
+                      help="Generate and save t-SNE plots of node embeddings")
+    parser.add_argument("--save-training-time-plots", action="store_true", default=False,
+                      help="Generate and save training time per epoch plots")
 
     # Benchmark options
     parser.add_argument(
@@ -1255,6 +1294,8 @@ def main():
             use_tqdm=False,
             save_history=args.save_history_json,
             save_curves=args.save_learning_curves,
+            save_tsne=args.save_tsne_plots,
+            save_time_plots=args.save_training_time_plots,
         )
         # Final results already printed in benchmark_all_models
 
@@ -1273,6 +1314,8 @@ def main():
             verbose=args.verbose,
             save_history=args.save_history_json,
             save_curves=args.save_learning_curves,
+            save_tsne=args.save_tsne_plots,
+            save_time_plots=args.save_training_time_plots,
         )
         # Final results already printed in benchmark_email_feature_combinations
 
@@ -1294,6 +1337,8 @@ def main():
             n_trials=args.n_trials,
             save_history=args.save_history_json,
             save_curves=args.save_learning_curves,
+            save_tsne=args.save_tsne_plots,
+            save_time_plots=args.save_training_time_plots,
         )
         # Final results already printed in benchmark_all_datasets
 

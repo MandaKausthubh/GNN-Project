@@ -5,6 +5,7 @@ Training and inference utilities with full wandb support.
 import os
 import copy
 import json
+import time
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import torch
@@ -97,6 +98,7 @@ class Trainer:
             "train_f1": [],
             "val_f1": [],
             "learning_rate": [],
+            "epoch_times": [],
         }
 
     def train_epoch(self, data: Data) -> Tuple[float, float, float]:
@@ -219,13 +221,19 @@ class Trainer:
             pbar = tqdm(total=epochs, desc="Training", bar_format="{l_bar}{bar}| {postfix}")
 
         for epoch in range(1, epochs + 1):
+            epoch_start_time = time.time()
+
             train_loss, train_acc, train_f1 = self.train_epoch(data)
             current_lr = self.optimizer.param_groups[0]["lr"]
+
+            epoch_end_time = time.time()
+            epoch_time = epoch_end_time - epoch_start_time
 
             self.history["train_loss"].append(train_loss)
             self.history["train_acc"].append(train_acc)
             self.history["train_f1"].append(train_f1)
             self.history["learning_rate"].append(current_lr)
+            self.history["epoch_times"].append(epoch_time)
 
             # Validation
             val_loss, val_acc, val_f1 = 0.0, 0.0, 0.0
