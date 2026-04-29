@@ -119,7 +119,7 @@ def benchmark_robustness(
     datasets: Optional[List[str]] = None,
     removal_fractions: Optional[List[float]] = None,
     epochs: int = 100,
-    n_runs: int = 3,
+    seed: int = 42,
     device: Optional[str] = None,
     output_dir: str = "./outputs",
     verbose: bool = False,
@@ -134,7 +134,7 @@ def benchmark_robustness(
         datasets: List of datasets to run on.
         removal_fractions: List of edge removal fractions (default: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]).
         epochs: Training epochs per run.
-        n_runs: Number of runs per configuration.
+        seed: Fixed random seed for reproducibility.
         device: Device to train on.
         output_dir: Output directory.
         verbose: Print progress.
@@ -193,66 +193,36 @@ def benchmark_robustness(
 
             for frac in removal_fractions:
                 frac_pct = int(frac * 100)
-                model_results = {"accuracy": [], "f1_score": [], "edge_count": []}
+                seed_everything(seed)
 
-                config_str = f"hid={default_hyperparams['hidden_channels']},removal={frac_pct}%,ep={epochs}"
-                run_pbar = tqdm(
-                    total=n_runs,
-                    desc=f"  [{model_name} {frac_pct}% removal] {config_str}",
-                    bar_format="{desc} |{bar}| {postfix}",
-                    ncols=110,
-                    position=1,
-                )
+                # Create modified graph
+                mod_data = create_robustness_data(data, frac, seed=seed + frac_pct)
+                edge_count = mod_data.edge_index.size(1)
 
-                for run in range(n_runs):
-                    seed = 42 + run
-                    seed_everything(seed)
+                try:
+                    history, test_metrics, _ = train_single_config(
+                        model_name=model_name,
+                        dataset_name=dataset_name,
+                        data=mod_data,
+                        hyperparams=default_hyperparams,
+                        epochs=epochs,
+                        device=device,
+                        verbose=verbose,
+                    )
 
-                    # Create modified graph
-                    mod_data = create_robustness_data(data, frac, seed=seed + frac_pct)
-                    edge_count = mod_data.edge_index.size(1)
+                    acc = float(test_metrics["accuracy"])
+                    f1 = float(test_metrics["f1_score"])
+                    print(f"    {model_name.upper()} {frac_pct}% removal: Acc={acc:.4f}, F1={f1:.4f}, edges={edge_count}")
 
-                    try:
-                        history, test_metrics, _ = train_single_config(
-                            model_name=model_name,
-                            dataset_name=dataset_name,
-                            data=mod_data,
-                            hyperparams=default_hyperparams,
-                            epochs=epochs,
-                            device=device,
-                            verbose=False,
-                        )
-
-                        model_results["accuracy"].append(test_metrics["accuracy"])
-                        model_results["f1_score"].append(test_metrics["f1_score"])
-                        model_results["edge_count"].append(edge_count)
-
-                        run_pbar.set_postfix_str(f"R{run+1}: Acc={test_metrics['accuracy']:.4f}")
-                        run_pbar.update(1)
-
-                    except Exception as e:
-                        run_pbar.set_postfix_str(f"R{run+1}: Failed ({str(e)[:30]})")
-                        run_pbar.update(1)
-                        if verbose:
-                            print(f"    Run failed: {e}")
-
-                run_pbar.close()
-
-                acc_mean = float(np.mean(model_results["accuracy"]))
-                acc_std = float(np.std(model_results["accuracy"]))
-                f1_mean = float(np.mean(model_results["f1_score"]))
-                f1_std = float(np.std(model_results["f1_score"]))
+                except Exception as e:
+                    print(f"    {model_name.upper()} {frac_pct}% removal: Failed ({str(e)[:60]})")
+                    acc, f1, edge_count = 0.0, 0.0, 0
 
                 all_results[dataset_name]["removals"][model_name][frac] = {
-                    "accuracy_mean": acc_mean,
-                    "accuracy_std": acc_std,
-                    "f1_mean": f1_mean,
-                    "f1_std": f1_std,
-                    "edges_remaining": int(np.mean(model_results["edge_count"])),
-                    "runs": n_runs,
+                    "accuracy": acc,
+                    "f1": f1,
+                    "edges_remaining": edge_count,
                 }
-
-                print(f"    {frac_pct}% removal: Acc={acc_mean:.4f} (+/- {acc_std:.4f}), F1={f1_mean:.4f} (+/- {f1_std:.4f})")
 
     # Print summary table
     print("\n" + "=" * 80)
@@ -273,7 +243,7 @@ def benchmark_robustness(
             row = f"{model_name:<20}"
             for frac in removal_fractions:
                 if frac in removals[model_name]:
-                    acc = removals[model_name][frac]["accuracy_mean"]
+                    acc = removals[model_name][frac]["accuracy"]
                     row += f"{acc:>10.4f}"
                 else:
                     row += f"{'N/A':>10}"
@@ -330,7 +300,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Edge removal fractions (0.0 to 0.5)",
     )
     parser.add_argument("--epochs", type=int, default=100, help="Training epochs per run")
-    parser.add_argument("--n-runs", type=int, default=3, help="Number of runs per config")
+    parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
     parser.add_argument("--device", type=str, default=None, help="Device (cuda/cpu)")
     parser.add_argument("--output-dir", type=str, default="./outputs", help="Output directory")
     parser.add_argument("--verbose", action="store_true", help="Verbose output")
@@ -355,7 +325,7 @@ def main():
         datasets=args.datasets,
         removal_fractions=args.removals,
         epochs=args.epochs,
-        n_runs=args.n_runs,
+        seed=args.seed,
         device=device,
         output_dir=args.output_dir,
         verbose=args.verbose,
