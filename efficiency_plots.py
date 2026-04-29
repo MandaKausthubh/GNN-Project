@@ -430,7 +430,7 @@ def hyperparameter_search(
 
     # Print final results summary
     print("\n" + "=" * 60)
-    print(f"[FINAL RESULTS - Hyperparameter Search: {model_name} on {dataset_name}]")
+    print(f"[FINAL RESULTS - Hyperparameter Search: {model_name} on {dataset_name} after {n_configs} trials]")
     print("=" * 60)
     print(f"Best Validation {val_metric}: {best_val_score:.4f}")
     print(f"Best Config: {best_config}")
@@ -458,7 +458,7 @@ def run_baseline_evaluations_on_dataset(
     """Run baseline evaluations for multiple models on a dataset."""
     results = {}
     for model_name in model_names:
-        print(f"\nEvaluating {model_name} on {dataset_name} with default hyperparameters...")
+        print(f"\nEvaluating {model_name} on {dataset_name} with hyperparameters...")
         pretty_print_dicts(hyperparams, padding=0)
         print('\n'+"-" * 50)
         print(f"Dataset stats:")
