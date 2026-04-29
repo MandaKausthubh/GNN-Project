@@ -298,6 +298,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="Edge removal fractions (0.0 to 0.5)",
     )
     parser.add_argument("--epochs", type=int, default=100, help="Training epochs per run")
+    parser.add_argument("--search-type", type=str, default="bayesian",
+                        choices=["bayesian", "random", "grid"], help="Hyperparameter search strategy")
+    parser.add_argument("--n-trials", type=int, default=15, help="Number of hyperparameter search trials")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
     parser.add_argument("--device", type=str, default=None, help="Device (cuda/cpu)")
     parser.add_argument("--output-dir", type=str, default="./outputs", help="Output directory")
@@ -323,6 +326,8 @@ def main():
         datasets=args.datasets,
         removal_fractions=args.removals,
         epochs=args.epochs,
+        search_type=args.search_type,
+        n_trials=args.n_trials,
         seed=args.seed,
         device=device,
         output_dir=args.output_dir,
