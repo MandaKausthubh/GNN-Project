@@ -406,10 +406,9 @@ def hyperparameter_search(
                 best_val_score = val_score
                 best_config = config
                 # Retrain with best config to get test metrics
-                _, best_test_metrics, _ = train_single_config(
+                _, best_test_metrics, _ = train_single_model_dataset_config(
                     model_name=model_name,
                     dataset_name=dataset_name,
-                    data=data,
                     hyperparams=config,
                     epochs=epochs,
                     device=device,
