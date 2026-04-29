@@ -524,8 +524,8 @@ def plot_oversmoothing_comparison(
             stds = []
             for lc in layer_counts:
                 entry = layers_data[model_name].get(lc, {})
-                accs.append(entry.get("accuracy_mean", 0.0))
-                stds.append(entry.get("accuracy_std", 0.0))
+                accs.append(entry.get("accuracy", 0.0))
+                stds.append(entry.get("accuracy", 0.0) * 0)
 
             color = model_colors.get(model_name, "gray")
             ls = model_linestyle.get(model_name, "-")
@@ -814,8 +814,8 @@ def plot_robustness_comparison(
             stds = []
             for frac in removal_fractions:
                 entry = removals[model_name].get(frac, {})
-                accs.append(entry.get("accuracy_mean", 0.0))
-                stds.append(entry.get("accuracy_std", 0.0))
+                accs.append(entry.get("accuracy", 0.0))
+                stds.append(0.0)
 
             color = model_colors.get(model_name, "gray")
             ls = model_linestyle.get(model_name, "-")
@@ -828,12 +828,7 @@ def plot_robustness_comparison(
                 label=label, color=color, alpha=0.85,
                 markersize=7,
             )
-            ax.fill_between(
-                x_vals,
-                [a - s for a, s in zip(accs, stds)],
-                [a + s for a, s in zip(accs, stds)],
-                alpha=0.12, color=color,
-            )
+            # No std bands for single-run results
 
         ax.set_xlabel("Edges Removed (%%)", fontsize=12)
         ax.set_ylabel("Accuracy", fontsize=12)
@@ -870,8 +865,8 @@ def plot_robustness_comparison(
             stds = []
             for frac in removal_fractions:
                 entry = removals[model_name].get(frac, {})
-                f1s.append(entry.get("f1_mean", 0.0))
-                stds.append(entry.get("f1_std", 0.0))
+                f1s.append(entry.get("f1", 0.0))
+                stds.append(0.0)
 
             color = model_colors.get(model_name, "gray")
             ls = model_linestyle.get(model_name, "-")
@@ -926,8 +921,8 @@ def plot_robustness_comparison(
         for i, model_name in enumerate(models):
             if model_name not in removals:
                 continue
-            accs = [removals[model_name].get(frac, {}).get("accuracy_mean", 0.0) for frac in removal_fractions]
-            stds = [removals[model_name].get(frac, {}).get("accuracy_std", 0.0) for frac in removal_fractions]
+            accs = [removals[model_name].get(frac, {}).get("accuracy", 0.0) for frac in removal_fractions]
+            stds = [0.0] * len(removal_fractions)
             color = model_colors.get(model_name, "gray")
             offset = (i - n_models / 2 + 0.5) * bar_width
             bars = ax.bar(x + offset, accs, bar_width, label=model_display.get(model_name, model_name),
@@ -965,7 +960,7 @@ def plot_robustness_comparison(
 
         matrix = []
         for model_name in model_filtered:
-            row = [removals[model_name].get(frac, {}).get("accuracy_mean", 0.0) for frac in removal_fractions]
+            row = [removals[model_name].get(frac, {}).get("accuracy", 0.0) for frac in removal_fractions]
             matrix.append(row)
 
         matrix = np.array(matrix)
@@ -1014,14 +1009,14 @@ def plot_robustness_comparison(
             if model_name not in removals:
                 continue
 
-            baseline = removals[model_name].get(0.0, {}).get("accuracy_mean", 1.0)
+            baseline = removals[model_name].get(0.0, {}).get("accuracy", 1.0)
             if baseline == 0:
                 continue
 
             norm_accs = []
             for frac in removal_fractions:
                 entry = removals[model_name].get(frac, {})
-                acc = entry.get("accuracy_mean", 0.0)
+                acc = entry.get("accuracy", 0.0)
                 norm_accs.append(acc / baseline)
 
             color = model_colors.get(model_name, "gray")
@@ -1071,7 +1066,7 @@ def plot_robustness_comparison(
 
             accs = []
             for frac in removal_fractions:
-                accs.append(removals[model_name].get(frac, {}).get("accuracy_mean", 0.0))
+                accs.append(removals[model_name].get(frac, {}).get("accuracy", 0.0))
 
             # Compute AUC (normalized: max possible = len(fracs))
             if len(accs) >= 2:
