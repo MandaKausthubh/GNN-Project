@@ -7,6 +7,8 @@ Generates t-SNE plots of node embeddings colored by class labels.
 import os
 from typing import Optional, Tuple
 
+from torch_geometric.data import Data
+from torch_geometric.seed import seed_everything
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
