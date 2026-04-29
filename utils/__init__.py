@@ -9,6 +9,20 @@ from .normalization import (
 )
 from .residual import ResidualGNNWrapper, ResidualGNNLayer, ResidualAPPNPWrapper
 
+# Plotting utilities
+from .tsne_plots import (
+    plot_tsne,
+    plot_tsne_from_model,
+    plot_tsne_comparison,
+    get_node_embeddings,
+)
+from .training_time_plots import (
+    plot_training_time_per_epoch,
+    plot_training_time_comparison,
+    plot_training_time_summary,
+    plot_avg_epoch_time_comparison,
+)
+
 __all__ = [
     # Training
     "Trainer",
@@ -27,4 +41,14 @@ __all__ = [
     "ResidualGNNWrapper",
     "ResidualGNNLayer",
     "ResidualAPPNPWrapper",
+    # t-SNE plots
+    "plot_tsne",
+    "plot_tsne_from_model",
+    "plot_tsne_comparison",
+    "get_node_embeddings",
+    # Training time plots
+    "plot_training_time_per_epoch",
+    "plot_training_time_comparison",
+    "plot_training_time_summary",
+    "plot_avg_epoch_time_comparison",
 ]
