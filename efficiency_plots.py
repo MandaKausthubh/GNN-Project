@@ -608,6 +608,7 @@ def main():
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--device", type=str, default=None, help="Device (cuda/cpu)")
     parser.add_argument("--n-hyperparam-trials", type=int, default=20, help="Number of hyperparameter trials for tuning")
+    parser.add_argument("--verbose", action="store_true", default=False, help="Verbose output during training and tuning")
 
     args = parser.parse_args()
 
