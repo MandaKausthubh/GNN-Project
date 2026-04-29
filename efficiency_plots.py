@@ -158,7 +158,8 @@ def create_masks(
     data: Data,
     train_ratio: float = 0.6,
     val_ratio: float = 0.2,
-    seed: int = 42
+    seed: int = 42,
+    device: Optional[torch.device] = None,
 ) -> Data:
     """Create train/val/test masks if they don't exist."""
     if hasattr(data, 'train_mask') and data.train_mask is not None:
@@ -171,9 +172,10 @@ def create_masks(
     train_size = int(num_nodes * train_ratio)    # type: ignore
     val_size = int(num_nodes * val_ratio)    # type: ignore
 
-    data.train_mask = torch.zeros(num_nodes, dtype=torch.bool)    # type: ignore
-    data.val_mask = torch.zeros(num_nodes, dtype=torch.bool)    # type: ignore
-    data.test_mask = torch.zeros(num_nodes, dtype=torch.bool)    # type: ignore
+    device = device or torch.device("cpu")
+    data.train_mask = torch.zeros(num_nodes, dtype=torch.bool, device=device)    # type: ignore
+    data.val_mask = torch.zeros(num_nodes, dtype=torch.bool, device=device)    # type: ignore
+    data.test_mask = torch.zeros(num_nodes, dtype=torch.bool, device=device)    # type: ignore
 
     data.train_mask[perm[:train_size]] = True
     data.val_mask[perm[train_size:train_size + val_size]] = True
@@ -244,7 +246,8 @@ def train_single_model_dataset_config(
     _, data = load_dataset(dataset_name, args)
 
     assert data is not None, "Data cannot be None"
-    data = create_masks(data)
+    data = data.to(device)
+    data = create_masks(data, device=device)
     assert hasattr(data, 'train_mask') and data.train_mask is not None, "train_mask must be created"
 
     if verbose:
@@ -538,6 +541,13 @@ def run_baseline_evaluations_on_dataset(
         ax.legend()
 
     fig.suptitle(f"Model Performance on {dataset_name}", fontsize=16)
+
+    # Save the figures in the output directory
+    output_dir = os.path.join("results", "efficiency_plots", dataset_name)
+    os.makedirs(output_dir, exist_ok=True)
+    fig_path = os.path.join(output_dir, f"model_performance.png")
+    fig.savefig(fig_path)
+    print(f"Saved performance plots to {fig_path}")
 
     return results
 
