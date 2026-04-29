@@ -39,6 +39,7 @@ def benchmark_layers(
     datasets: Optional[List[str]] = None,
     layer_counts: Optional[List[int]] = None,
     epochs: int = 100,
+    epochs_schedule: Optional[Dict[int, int]] = None,
     n_runs: int = 3,
     device: Optional[str] = None,
     output_dir: str = "./outputs",
@@ -53,7 +54,9 @@ def benchmark_layers(
         models: List of model types (e.g. gcn, residual_gcn, gat).
         datasets: List of datasets to run on.
         layer_counts: List of layer counts to compare (default: [2, 4, 8]).
-        epochs: Training epochs per run.
+        epochs: Default training epochs per run (used as fallback).
+        epochs_schedule: Dict mapping layer_count -> epochs for that depth.
+                        Defaults to {2: 100, 4: 150, 8: 200}.
         n_runs: Number of runs per configuration.
         device: Device to train on.
         output_dir: Output directory.
@@ -66,6 +69,7 @@ def benchmark_layers(
     datasets = datasets or ["amazon", "dblp", "email"]
     models = models or ["gcn", "residual_gcn", "gat", "residual_gat", "appnp", "residual_appnp"]
     layer_counts = layer_counts or [2, 4, 8]
+    epochs_schedule = epochs_schedule or {2: 100, 4: 150, 8: 200}
     device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     default_hyperparams = {
@@ -103,9 +107,10 @@ def benchmark_layers(
 
             for num_layers in layer_counts:
                 hyperparams = {**default_hyperparams, "num_layers": num_layers}
+                train_epochs = epochs_schedule.get(num_layers, epochs)
                 model_results = {"accuracy": [], "f1_score": [], "histories": []}
 
-                config_str = f"hid={hyperparams['hidden_channels']},layers={num_layers},lr={hyperparams['lr']}"
+                config_str = f"hid={hyperparams['hidden_channels']},layers={num_layers},lr={hyperparams['lr']},ep={train_epochs}"
                 run_pbar = tqdm(
                     total=n_runs,
                     desc=f"  [{model_name} L{num_layers}] {config_str}",
@@ -129,7 +134,7 @@ def benchmark_layers(
                             dataset_name=dataset_name,
                             data=data_run,
                             hyperparams=hyperparams,
-                            epochs=epochs,
+                            epochs=train_epochs,
                             device=device,
                             verbose=False,
                         )
@@ -259,7 +264,13 @@ def build_parser() -> argparse.ArgumentParser:
         default=[2, 4, 8],
         help="Layer counts to compare",
     )
-    parser.add_argument("--epochs", type=int, default=100, help="Training epochs")
+    parser.add_argument("--epochs", type=int, default=100, help="Base training epochs")
+    parser.add_argument(
+        "--epochs-schedule",
+        type=str,
+        default="2:100,4:150,8:200",
+        help="Epoch schedule per layer count, format: L1:E1,L2:E2,...",
+    )
     parser.add_argument("--n-runs", type=int, default=3, help="Number of runs per config")
     parser.add_argument("--device", type=str, default=None, help="Device (cuda/cpu)")
     parser.add_argument(
@@ -280,6 +291,15 @@ def main():
     parser = build_parser()
     args = parser.parse_args()
 
+    # Parse epochs schedule (format: "2:100,4:150,8:200")
+    epochs_schedule = {}
+    if args.epochs_schedule:
+        for part in args.epochs_schedule.split(","):
+            key_val = part.strip().split(":")
+            if len(key_val) == 2:
+                layer_count, epochs_val = int(key_val[0]), int(key_val[1])
+                epochs_schedule[layer_count] = epochs_val
+
     device = args.device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
@@ -289,6 +309,7 @@ def main():
         datasets=args.datasets,
         layer_counts=args.layers,
         epochs=args.epochs,
+        epochs_schedule=epochs_schedule,
         n_runs=args.n_runs,
         device=device,
         output_dir=args.output_dir,
