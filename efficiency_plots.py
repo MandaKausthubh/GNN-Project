@@ -242,7 +242,10 @@ def train_single_model_dataset_config(
 ) -> Tuple[Dict[str, List[float]], Dict[str, float], nn.Module]:
     """Train a single model on a single dataset configuration."""
     _, data = load_dataset(dataset_name, args)
+
+    assert data is not None, "Data cannot be None"
     data = create_masks(data)
+    assert hasattr(data, 'train_mask') and data.train_mask is not None, "train_mask must be created"
 
     stats = get_dataset_stats(data)
     if verbose:
@@ -381,7 +384,7 @@ def hyperparameter_search(
                 hyperparams=config,
                 epochs=epochs,
                 device=device,   # type: ignore
-                verbose=False,
+                verbose=True,
             )
 
             val_score = val_metrics.get(val_metric, 0)
@@ -410,7 +413,7 @@ def hyperparameter_search(
                     hyperparams=config,
                     epochs=epochs,
                     device=device,
-                    verbose=False,
+                    verbose=True,
                 )
                 # pbar.set_postfix_str(f"Cfg-{i+1}: {config_str} | {val_metric}={val_score:.4f} (BEST)")
             else:
