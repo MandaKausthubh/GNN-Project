@@ -511,7 +511,7 @@ def run_baseline_evaluations_on_dataset(
     # Validation Curves for all configs: Accuracy, F1 Score, Loss vs Steps
     # Plot should be a 3 x 2 subfigure grid: 3 rows for Accuracy, F1 Score, Loss; 2 columns for Training and Validation
 
-    _, axes = plt.subplots(3, 2, figsize=(15, 12))
+    fig, axes = plt.subplots(3, 2, figsize=(15, 12))
     for model_name, result in results.items():
         tuning_results = result["tuning_results"]["trials"]
         for trial in tuning_results:
@@ -537,7 +537,7 @@ def run_baseline_evaluations_on_dataset(
         ax.set_xlabel("Epochs")
         ax.legend()
 
-    axes.set_title(f"Model Performance Curves: {dataset_name}")
+    fig.suptitle(f"Model Performance on {dataset_name}", fontsize=16)
 
     return results
 
