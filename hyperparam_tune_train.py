@@ -347,6 +347,7 @@ def plot_comparison(
 ) -> Dict[str, str]:
     """
     Generate comparison plots for all dataset-model combinations.
+    Creates separate plots per dataset with validation vs testing comparisons.
 
     Args:
         all_results: Dictionary with structure {dataset: {model: {metrics}}}
@@ -368,210 +369,207 @@ def plot_comparison(
     models = sorted(list(models))
 
     # ========================================================================
-    # Plot 1: Train + Test Accuracy Comparison
+    # Create one plot per dataset with validation vs testing metrics
     # ========================================================================
-    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+    for dataset in datasets:
+        models_data = all_results.get(dataset, {})
 
-    # Left: Bar chart of final test accuracy for each dataset-model combo
-    n_datasets = len(datasets)
-    n_models = len(models)
-    x = np.arange(n_datasets)
-    width = 0.8 / n_models
+        # Count models that have history for this dataset
+        models_with_history = [m for m in models if m in models_data and "history" in models_data[m]]
 
-    for i, model in enumerate(models):
-        accuracies = []
-        for ds in datasets:
-            if model in all_results[ds]:
-                acc = all_results[ds][model].get("test_accuracy", 0)
-                accuracies.append(acc)
-            else:
-                accuracies.append(0)
+        if not models_with_history:
+            continue
 
-        offset = (i - n_models / 2 + 0.5) * width
-        bars = axes[0].bar(x + offset, accuracies, width, label=model, alpha=0.8)
+        # ---- Accuracy: Validation vs Testing ----
+        fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 
-        # Add value labels
-        for bar, acc in zip(bars, accuracies):
-            height = bar.get_height()
-            axes[0].annotate(f"{acc:.3f}",
-                           xy=(bar.get_x() + bar.get_width() / 2, height),
-                           xytext=(0, 3), textcoords="offset points",
-                           ha="center", va="bottom", fontsize=8)
+        # Left: Bar chart - Val vs Test Accuracy per model
+        val_accs = []
+        test_accs = []
+        model_labels = []
 
-    axes[0].set_xlabel("Dataset", fontsize=12)
-    axes[0].set_ylabel("Test Accuracy", fontsize=12)
-    axes[0].set_title("Test Accuracy Comparison Across Datasets", fontsize=14)
-    axes[0].set_xticks(x)
-    axes[0].set_xticklabels(datasets, rotation=45, ha="right")
-    axes[0].legend()
-    axes[0].grid(axis="y", alpha=0.3)
-    axes[0].set_ylim(0, 1.0)
+        for model in models_with_history:
+            metrics = models_data[model]
+            history = metrics.get("history", {})
 
-    # Right: Training curves for best config of each model (first dataset)
-    if datasets:
-        first_ds = datasets[0]
-        for model in models:
-            if model in all_results[first_ds] and "history" in all_results[first_ds][model]:
-                history = all_results[first_ds][model]["history"]
-                if history:
-                    train_acc = history.get("train_acc", [])
-                    val_acc = history.get("val_acc", [])
-                    if train_acc:
-                        axes[1].plot(train_acc, linewidth=2, label=f"{model} (train)")
-                    if val_acc:
-                        # Interpolate val_acc to match train_acc length
-                        val_indices = np.linspace(0, len(train_acc) - 1, len(val_acc)).astype(int)
-                        axes[1].plot(range(len(train_acc)),
-                                   np.interp(range(len(train_acc)), val_indices, val_acc),
-                                   linewidth=2, linestyle="--", label=f"{model} (val)")
+            # Get final validation accuracy from history
+            val_acc = history.get("val_acc", [0])[-1] if history.get("val_acc") else 0
+            test_acc = metrics.get("test_accuracy", 0)
+
+            val_accs.append(val_acc)
+            test_accs.append(test_acc)
+            model_labels.append(model)
+
+        x = np.arange(len(model_labels))
+        width = 0.35
+
+        bars1 = axes[0].bar(x - width/2, val_accs, width, label="Validation Acc", color="#2196F3", alpha=0.8)
+        bars2 = axes[0].bar(x + width/2, test_accs, width, label="Test Acc", color="#FF5722", alpha=0.8)
+
+        for bar, val, test in zip(bars1, val_accs, test_accs):
+            axes[0].annotate(f"{val:.3f}", xy=(bar.get_x() + bar.get_width() / 2, bar.get_height()),
+                           xytext=(0, 2), textcoords="offset points", ha="center", va="bottom", fontsize=8)
+        for bar, val, test in zip(bars2, val_accs, test_accs):
+            axes[0].annotate(f"{test:.3f}", xy=(bar.get_x() + bar.get_width() / 2, bar.get_height()),
+                           xytext=(0, 2), textcoords="offset points", ha="center", va="bottom", fontsize=8)
+
+        axes[0].set_xlabel("Model", fontsize=12)
+        axes[0].set_ylabel("Accuracy", fontsize=12)
+        axes[0].set_title(f"{dataset}: Validation vs Test Accuracy", fontsize=14)
+        axes[0].set_xticks(x)
+        axes[0].set_xticklabels(model_labels, rotation=45, ha="right")
+        axes[0].legend()
+        axes[0].grid(axis="y", alpha=0.3)
+        axes[0].set_ylim(0, 1.1)
+
+        # Right: Training curves - Val Accuracy over epochs
+        for model in models_with_history:
+            history = models_data[model].get("history", {})
+            train_acc = history.get("train_acc", [])
+            val_acc = history.get("val_acc", [])
+
+            if train_acc:
+                axes[1].plot(range(1, len(train_acc) + 1), train_acc, linewidth=2, label=f"{model} (train)")
+            if val_acc:
+                val_indices = np.linspace(0, len(train_acc) - 1, len(val_acc)).astype(int)
+                axes[1].plot(range(1, len(train_acc) + 1),
+                           np.interp(range(len(train_acc)), val_indices, val_acc),
+                           linewidth=2, linestyle="--", label=f"{model} (val)")
 
         axes[1].set_xlabel("Epoch", fontsize=12)
         axes[1].set_ylabel("Accuracy", fontsize=12)
-        axes[1].set_title(f"Training Curves ({first_ds} dataset)", fontsize=14)
+        axes[1].set_title(f"{dataset}: Accuracy Training Curves", fontsize=14)
         axes[1].legend(fontsize=8)
         axes[1].grid(alpha=0.3)
 
-    plt.tight_layout()
-    accuracy_path = os.path.join(output_dir, f"comparison_accuracy_{timestamp}.png")
-    plt.savefig(accuracy_path, dpi=150, bbox_inches="tight")
-    saved_plots["accuracy"] = accuracy_path
-    print(f"Accuracy comparison plot saved to: {accuracy_path}")
-    if show:
-        plt.show()
-    plt.close()
+        plt.tight_layout()
+        acc_path = os.path.join(output_dir, f"accuracy_{dataset}_{timestamp}.png")
+        plt.savefig(acc_path, dpi=150, bbox_inches="tight")
+        saved_plots[f"accuracy_{dataset}"] = acc_path
+        print(f"Accuracy plot saved to: {acc_path}")
+        if show:
+            plt.show()
+        plt.close()
 
-    # ========================================================================
-    # Plot 2: Train + Test Loss (Validation) Comparison
-    # ========================================================================
-    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+        # ---- F1 Score: Validation vs Testing ----
+        fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 
-    # Left: Training curves - loss comparison
-    if datasets:
-        first_ds = datasets[0]
-        for model in models:
-            if model in all_results[first_ds] and "history" in all_results[first_ds][model]:
-                history = all_results[first_ds][model]["history"]
-                if history:
-                    train_loss = history.get("train_loss", [])
-                    val_loss = history.get("val_loss", [])
-                    if train_loss:
-                        axes[0].plot(train_loss, linewidth=2, label=f"{model} (train)")
-                    if val_loss:
-                        val_indices = np.linspace(0, len(train_loss) - 1, len(val_loss)).astype(int)
-                        axes[0].plot(range(len(train_loss)),
-                                   np.interp(range(len(train_loss)), val_indices, val_loss),
-                                   linewidth=2, linestyle="--", label=f"{model} (val)")
+        val_f1s = []
+        test_f1s = []
 
-        axes[0].set_xlabel("Epoch", fontsize=12)
-        axes[0].set_ylabel("Loss", fontsize=12)
-        axes[0].set_title(f"Training and Validation Loss ({first_ds})", fontsize=14)
-        axes[0].legend(fontsize=8)
-        axes[0].grid(alpha=0.3)
+        for model in models_with_history:
+            metrics = models_data[model]
+            history = metrics.get("history", {})
 
-    # Right: Final train vs test loss comparison
-    train_losses = []
-    test_losses = []
-    labels = []
+            val_f1 = history.get("val_f1", [0])[-1] if history.get("val_f1") else 0
+            test_f1 = metrics.get("test_f1_score", 0)
 
-    for ds in datasets:
-        for model in models:
-            if model in all_results[ds] and "history" in all_results[ds][model]:
-                history = all_results[ds][model]["history"]
-                if history:
-                    train_losses.append(history.get("train_loss", [0])[-1])
-                    test_losses.append(history.get("val_loss", [0])[-1])
-                    labels.append(f"{ds}\n{model}")
+            val_f1s.append(val_f1)
+            test_f1s.append(test_f1)
 
-    x = np.arange(len(labels))
-    width = 0.35
+        bars1 = axes[0].bar(x - width/2, val_f1s, width, label="Validation F1", color="#4CAF50", alpha=0.8)
+        bars2 = axes[0].bar(x + width/2, test_f1s, width, label="Test F1", color="#9C27B0", alpha=0.8)
 
-    if train_losses:
-        axes[1].bar(x - width/2, train_losses, width, label="Train Loss", alpha=0.8)
-        axes[1].bar(x + width/2, test_losses, width, label="Val Loss", alpha=0.8)
+        for bar, val, test in zip(bars1, val_f1s, test_f1s):
+            axes[0].annotate(f"{val:.3f}", xy=(bar.get_x() + bar.get_width() / 2, bar.get_height()),
+                           xytext=(0, 2), textcoords="offset points", ha="center", va="bottom", fontsize=8)
+        for bar, val, test in zip(bars2, val_f1s, test_f1s):
+            axes[0].annotate(f"{test:.3f}", xy=(bar.get_x() + bar.get_width() / 2, bar.get_height()),
+                           xytext=(0, 2), textcoords="offset points", ha="center", va="bottom", fontsize=8)
 
-        axes[1].set_xlabel("Dataset + Model", fontsize=12)
-        axes[1].set_ylabel("Final Loss", fontsize=12)
-        axes[1].set_title("Final Train vs Validation Loss", fontsize=14)
-        axes[1].set_xticks(x)
-        axes[1].set_xticklabels(labels, rotation=45, ha="right", fontsize=8)
-        axes[1].legend()
-        axes[1].grid(axis="y", alpha=0.3)
+        axes[0].set_xlabel("Model", fontsize=12)
+        axes[0].set_ylabel("F1 Score", fontsize=12)
+        axes[0].set_title(f"{dataset}: Validation vs Test F1 Score", fontsize=14)
+        axes[0].set_xticks(x)
+        axes[0].set_xticklabels(model_labels, rotation=45, ha="right")
+        axes[0].legend()
+        axes[0].grid(axis="y", alpha=0.3)
+        axes[0].set_ylim(0, 1.1)
 
-    plt.tight_layout()
-    loss_path = os.path.join(output_dir, f"comparison_loss_{timestamp}.png")
-    plt.savefig(loss_path, dpi=150, bbox_inches="tight")
-    saved_plots["loss"] = loss_path
-    print(f"Loss comparison plot saved to: {loss_path}")
-    if show:
-        plt.show()
-    plt.close()
+        # Right: F1 Training curves
+        for model in models_with_history:
+            history = models_data[model].get("history", {})
+            train_f1 = history.get("train_f1", [])
+            val_f1 = history.get("val_f1", [])
 
-    # ========================================================================
-    # Plot 3: F1 Score Comparison
-    # ========================================================================
-    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
-
-    # Left: Bar chart of F1 scores
-    for i, model in enumerate(models):
-        f1_scores = []
-        for ds in datasets:
-            if model in all_results[ds]:
-                f1 = all_results[ds][model].get("test_f1_score", 0)
-                f1_scores.append(f1)
-            else:
-                f1_scores.append(0)
-
-        offset = (i - n_models / 2 + 0.5) * width
-        bars = axes[0].bar(x + offset, f1_scores, width, label=model, alpha=0.8)
-
-        # Add value labels
-        for bar, f1 in zip(bars, f1_scores):
-            height = bar.get_height()
-            axes[0].annotate(f"{f1:.3f}",
-                           xy=(bar.get_x() + bar.get_width() / 2, height),
-                           xytext=(0, 3), textcoords="offset points",
-                           ha="center", va="bottom", fontsize=8)
-
-    axes[0].set_xlabel("Dataset", fontsize=12)
-    axes[0].set_ylabel("F1 Score", fontsize=12)
-    axes[0].set_title("F1 Score Comparison Across Datasets", fontsize=14)
-    axes[0].set_xticks(x)
-    axes[0].set_xticklabels(datasets, rotation=45, ha="right")
-    axes[0].legend()
-    axes[0].grid(axis="y", alpha=0.3)
-    axes[0].set_ylim(0, 1.0)
-
-    # Right: F1 training curves
-    if datasets:
-        first_ds = datasets[0]
-        for model in models:
-            if model in all_results[first_ds] and "history" in all_results[first_ds][model]:
-                history = all_results[first_ds][model]["history"]
-                if history:
-                    train_f1 = history.get("train_f1", [])
-                    val_f1 = history.get("val_f1", [])
-                    if train_f1:
-                        axes[1].plot(train_f1, linewidth=2, label=f"{model} (train)")
-                    if val_f1:
-                        val_indices = np.linspace(0, len(train_f1) - 1, len(val_f1)).astype(int)
-                        axes[1].plot(range(len(train_f1)),
-                                   np.interp(range(len(train_f1)), val_indices, val_f1),
-                                   linewidth=2, linestyle="--", label=f"{model} (val)")
+            if train_f1:
+                axes[1].plot(range(1, len(train_f1) + 1), train_f1, linewidth=2, label=f"{model} (train)")
+            if val_f1:
+                val_indices = np.linspace(0, len(train_f1) - 1, len(val_f1)).astype(int)
+                axes[1].plot(range(1, len(train_f1) + 1),
+                           np.interp(range(len(train_f1)), val_indices, val_f1),
+                           linewidth=2, linestyle="--", label=f"{model} (val)")
 
         axes[1].set_xlabel("Epoch", fontsize=12)
         axes[1].set_ylabel("F1 Score", fontsize=12)
-        axes[1].set_title(f"F1 Score Training Curves ({first_ds})", fontsize=14)
+        axes[1].set_title(f"{dataset}: F1 Score Training Curves", fontsize=14)
         axes[1].legend(fontsize=8)
         axes[1].grid(alpha=0.3)
 
-    plt.tight_layout()
-    f1_path = os.path.join(output_dir, f"comparison_f1_{timestamp}.png")
-    plt.savefig(f1_path, dpi=150, bbox_inches="tight")
-    saved_plots["f1"] = f1_path
-    print(f"F1 score comparison plot saved to: {f1_path}")
-    if show:
-        plt.show()
-    plt.close()
+        plt.tight_layout()
+        f1_path = os.path.join(output_dir, f"f1score_{dataset}_{timestamp}.png")
+        plt.savefig(f1_path, dpi=150, bbox_inches="tight")
+        saved_plots[f"f1score_{dataset}"] = f1_path
+        print(f"F1 score plot saved to: {f1_path}")
+        if show:
+            plt.show()
+        plt.close()
+
+    # ========================================================================
+    # Cross-dataset summary: Test Accuracy and F1 only
+    # ========================================================================
+    if len(datasets) > 1:
+        fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+
+        n_datasets = len(datasets)
+        n_models = len(models)
+        x = np.arange(n_datasets)
+        width = 0.8 / n_models
+
+        # Test Accuracy summary
+        for i, model in enumerate(models):
+            test_accs = []
+            for ds in datasets:
+                acc = all_results[ds].get(model, {}).get("test_accuracy", 0)
+                test_accs.append(acc)
+            offset = (i - n_models / 2 + 0.5) * width
+            axes[0].bar(x + offset, test_accs, width, label=model, alpha=0.8)
+
+        axes[0].set_xlabel("Dataset", fontsize=12)
+        axes[0].set_ylabel("Test Accuracy", fontsize=12)
+        axes[0].set_title("Test Accuracy Summary", fontsize=14)
+        axes[0].set_xticks(x)
+        axes[0].set_xticklabels(datasets, rotation=45, ha="right")
+        axes[0].legend()
+        axes[0].grid(axis="y", alpha=0.3)
+        axes[0].set_ylim(0, 1.1)
+
+        # Test F1 summary
+        for i, model in enumerate(models):
+            test_f1s = []
+            for ds in datasets:
+                f1 = all_results[ds].get(model, {}).get("test_f1_score", 0)
+                test_f1s.append(f1)
+            offset = (i - n_models / 2 + 0.5) * width
+            axes[1].bar(x + offset, test_f1s, width, label=model, alpha=0.8)
+
+        axes[1].set_xlabel("Dataset", fontsize=12)
+        axes[1].set_ylabel("Test F1 Score", fontsize=12)
+        axes[1].set_title("Test F1 Score Summary", fontsize=14)
+        axes[1].set_xticks(x)
+        axes[1].set_xticklabels(datasets, rotation=45, ha="right")
+        axes[1].legend()
+        axes[1].grid(axis="y", alpha=0.3)
+        axes[1].set_ylim(0, 1.1)
+
+        plt.tight_layout()
+        summary_path = os.path.join(output_dir, f"summary_{timestamp}.png")
+        plt.savefig(summary_path, dpi=150, bbox_inches="tight")
+        saved_plots["summary"] = summary_path
+        print(f"Summary plot saved to: {summary_path}")
+        if show:
+            plt.show()
+        plt.close()
 
     return saved_plots
 
