@@ -20,12 +20,11 @@ from tqdm import tqdm
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from train import (
-    create_model,
     create_masks,
     get_dataset_stats,
     load_dataset,
     seed_everything,
-    train_single_config,
+    hyperparameter_search,
 )
 from utils import Trainer
 
@@ -34,23 +33,23 @@ from utils import Trainer
 # Edge Removal Utilities
 # =============================================================================
 
-def remove_edges_fraction(
+def remove_edges_cumulative(
     edge_index: torch.Tensor,
     edge_weight: Optional[torch.Tensor] = None,
-    fraction: float = 0.1,
+    removal_fraction: float = 0.1,
     seed: Optional[int] = None,
-) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+) -> Tuple[torch.Tensor, Optional[torch.Tensor], List[int]]:
     """
-    Randomly remove a fraction of edges from the graph.
+    Remove edges cumulatively - higher fractions remove a superset of lower fractions.
 
     Args:
         edge_index: Edge indices [2, num_edges].
         edge_weight: Optional edge weights.
-        fraction: Fraction of edges to remove (0.0 to 1.0).
+        removal_fraction: Fraction of edges to remove (0.0 to 1.0).
         seed: Random seed for reproducibility.
 
     Returns:
-        Tuple of (reduced_edge_index, reduced_edge_weight or None).
+        Tuple of (reduced_edge_index, reduced_edge_weight, removed_edge_ids).
     """
     if seed is not None:
         random.seed(seed)
@@ -58,20 +57,21 @@ def remove_edges_fraction(
         torch.manual_seed(seed)
 
     num_edges = edge_index.size(1)
-    num_remove = int(num_edges * fraction)
+    num_remove = int(num_edges * removal_fraction)
 
     if num_remove == 0:
-        return edge_index, edge_weight
+        return edge_index, edge_weight, []
 
-    # Select edges to remove
+    # Single shuffle to determine removal order - higher fractions get a superset
     idxs = list(range(num_edges))
-    remove_idxs = random.sample(idxs, num_remove)
-    keep_idxs = [i for i in idxs if i not in remove_idxs]
+    random.shuffle(idxs)
+    removed_ids = idxs[:num_remove]
+    keep_ids = idxs[num_remove:]
 
-    reduced_edge_index = edge_index[:, keep_idxs]
-    reduced_edge_weight = edge_weight[keep_idxs] if edge_weight is not None else None
+    reduced_edge_index = edge_index[:, keep_ids]
+    reduced_edge_weight = edge_weight[keep_ids] if edge_weight is not None else None
 
-    return reduced_edge_index, reduced_edge_weight
+    return reduced_edge_index, reduced_edge_weight, removed_ids
 
 
 def create_robustness_data(
@@ -82,6 +82,8 @@ def create_robustness_data(
     """
     Create a modified data object with edges randomly removed.
 
+    Uses cumulative removal - higher fractions remove a superset of lower fractions.
+
     Args:
         data: PyG Data object.
         removal_fraction: Fraction of edges to remove.
@@ -90,10 +92,10 @@ def create_robustness_data(
     Returns:
         New Data object with reduced edges.
     """
-    edge_index, edge_weight = remove_edges_fraction(
+    edge_index, edge_weight, _ = remove_edges_cumulative(
         data.edge_index,
         edge_weight=data.edge_attr if data.edge_attr is not None else None,
-        fraction=removal_fraction,
+        removal_fraction=removal_fraction,
         seed=seed,
     )
 
@@ -119,6 +121,8 @@ def benchmark_robustness(
     datasets: Optional[List[str]] = None,
     removal_fractions: Optional[List[float]] = None,
     epochs: int = 100,
+    search_type: str = "bayesian",
+    n_trials: int = 15,
     seed: int = 42,
     device: Optional[str] = None,
     output_dir: str = "./outputs",
@@ -128,12 +132,16 @@ def benchmark_robustness(
     """
     Benchmark model robustness under edge removal attacks.
 
+    Each model at each removal fraction gets hyperparameter-tuned before evaluation.
+
     Args:
         data_dir: Data root directory.
         models: List of model types.
         datasets: List of datasets to run on.
         removal_fractions: List of edge removal fractions (default: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]).
-        epochs: Training epochs per run.
+        epochs: Training epochs per trial.
+        search_type: Hyperparameter search strategy ("bayesian", "random", "grid").
+        n_trials: Number of trials for hyperparameter search.
         seed: Fixed random seed for reproducibility.
         device: Device to train on.
         output_dir: Output directory.
@@ -147,18 +155,6 @@ def benchmark_robustness(
     models = models or ["gcn", "gat", "sage", "appnp", "residual_gcn", "residual_gat", "residual_sage", "residual_appnp"]
     removal_fractions = removal_fractions or [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
     device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    default_hyperparams = {
-        "hidden_channels": 128,
-        "num_layers": 2,
-        "dropout": 0.5,
-        "norm": "layer",
-        "lr": 0.01,
-        "weight_decay": 5e-4,
-        "gat_heads": 4,
-        "K": 10,
-        "alpha": 0.1,
-    }
 
     all_results: Dict[str, Dict[str, Dict[str, Any]]] = {}
 
@@ -195,16 +191,18 @@ def benchmark_robustness(
                 frac_pct = int(frac * 100)
                 seed_everything(seed)
 
-                # Create modified graph
-                mod_data = create_robustness_data(data, frac, seed=seed + frac_pct)
+                # Create modified graph - same seed for all fractions ensures cumulative removal
+                # (20% removes a superset of 10% edges since sampling builds on same RNG sequence)
+                mod_data = create_robustness_data(data, frac, seed=seed)
                 edge_count = mod_data.edge_index.size(1)
 
                 try:
-                    history, test_metrics, _ = train_single_config(
+                    best_hyperparams, test_metrics, history = hyperparameter_search(
                         model_name=model_name,
                         dataset_name=dataset_name,
                         data=mod_data,
-                        hyperparams=default_hyperparams,
+                        search_type=search_type,
+                        n_trials=n_trials,
                         epochs=epochs,
                         device=device,
                         verbose=verbose,
