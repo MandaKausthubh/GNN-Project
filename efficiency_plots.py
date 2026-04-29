@@ -305,6 +305,7 @@ def hyperparameter_search(
     val_metric: str = "accuracy",
     device: Optional[str] = None,
     verbose: bool = False,
+    args: Optional[argparse.Namespace] = None,
 ) -> Tuple[Dict[str, Any], Dict[str, float], Dict[str, List[float]]]:
     """
     Perform hyperparameter search.
@@ -396,6 +397,7 @@ def hyperparameter_search(
                 epochs=epochs,
                 device=device,   # type: ignore
                 verbose=True,
+                args=args
             )
 
             val_score = val_metrics.get(val_metric, 0)
@@ -424,6 +426,7 @@ def hyperparameter_search(
                     epochs=epochs,
                     device=device,   # type: ignore
                     verbose=True,
+                    args=args
                 )
                 # pbar.set_postfix_str(f"Cfg-{i+1}: {config_str} | {val_metric}={val_score:.4f} (BEST)")
             else:
@@ -491,6 +494,7 @@ def run_baseline_evaluations_on_dataset(
             val_metric="accuracy",
             device=device,   # type: ignore
             verbose=True,
+            args=args
         )
 
         print(f"Best hyperparameters for {model_name}:")
@@ -633,6 +637,8 @@ def main():
 
     device = torch.device(args.device if args.device else ("cuda" if torch.cuda.is_available() else "cpu"))
     print(f"Using device: {device} for experiments")
+
+    args.device = device
 
     run_efficiency_plots(args)
 
