@@ -91,7 +91,7 @@ def pretty_print_dicts(data, padding: int = 0):
     indent = " " * padding
     if isinstance(data, dict):
         for key, value in data.items():
-            print(f"{indent}{key}:")
+            print(f"{indent}{key}:", end="")
             pretty_print_dicts(value, padding + 4)
     elif isinstance(data, list):
         for i, item in enumerate(data):
