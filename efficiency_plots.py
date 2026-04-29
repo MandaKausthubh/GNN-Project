@@ -580,7 +580,8 @@ def run_efficiency_plots(args):
 def main():
     parser = argparse.ArgumentParser(description='Plot efficiency curves for different models.')
 
-    parser.add_argument("--dataset", type=str, choices=["amazon", "dblp", "email"], default="email", help="Dataset to use")
+    # parser.add_argument("--dataset", type=str, choices=["amazon", "dblp", "email"], default="email", help="Dataset to use")
+    parser.add_argument("--datasets", type=str, nargs="+", default=["email"], help="List of datasets to use")
     parser.add_argument("--data-dir", type=str, default="./data", help="Data directory",)
 
     # Email feature flags
