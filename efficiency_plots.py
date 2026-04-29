@@ -87,13 +87,18 @@ HYPERPARAM_RANDOM_DIST = {
 }
 
 # ================= Useful stuff =================
-def pretty_print_dicts(dict, padding:int = 0):
-    for key, value in dict.items():
-        if isinstance(value, dict):
-            print(" " * padding + f"{key}:")
+def pretty_print_dicts(data, padding: int = 0):
+    indent = " " * padding
+    if isinstance(data, dict):
+        for key, value in data.items():
+            print(f"{indent}{key}:", end="")
             pretty_print_dicts(value, padding + 4)
-        else:
-            print(" " * padding + f"{key}: {value}")
+    elif isinstance(data, list):
+        for i, item in enumerate(data):
+            print(f"{indent}[{i}]:")
+            pretty_print_dicts(item, padding + 4)
+    else:
+        print(f"{indent}{data}")
 
 
 
@@ -608,6 +613,7 @@ def main():
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--device", type=str, default=None, help="Device (cuda/cpu)")
     parser.add_argument("--n-hyperparam-trials", type=int, default=20, help="Number of hyperparameter trials for tuning")
+    parser.add_argument("--verbose", action="store_true", default=False, help="Verbose output during training and tuning")
 
     args = parser.parse_args()
 
