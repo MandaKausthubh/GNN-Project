@@ -1,117 +1,723 @@
 """
-Training time analysis utilities for GNN training.
+Training time analysis and ablation comparison utilities for GNN training.
 
-Generates bar charts comparing average training time per epoch across models.
+Generates bar charts for training time comparisons and ablation studies.
 """
 
 import os
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
 
 
+# =============================================================================
+# Generic Avg Epoch Time (used by train.py benchmark_all_datasets)
+# =============================================================================
+
 def plot_avg_epoch_time_comparison(
-    all_results: Dict[str, Dict[str, Dict[str, Any]]],
-    save_path: Optional[str] = None,
+    avg_times: Dict[str, Dict[str, float]],
+    std_times: Optional[Dict[str, Dict[str, float]]] = None,
+    save_dir: Optional[str] = None,
     show: bool = False,
     dpi: int = 150,
-    figsize: Tuple[int, int] = (16, 6),
 ) -> None:
     """
-    Plot average training time per epoch as grouped bar chart across models and datasets.
+    Generate one bar chart per dataset showing avg training time per epoch across models.
 
     Args:
-        all_results: Benchmark results dict with structure:
-            {dataset_name: {"benchmark": {model_name: {"individual_runs": {
-                "histories": [{"epoch_times": [...]}, ...]
-            }}}}}
-        save_path: Path to save the figure. If None, figure is not saved.
-        show: Whether to display the plot.
-        dpi: DPI for saved figure.
-        figsize: Figure size tuple (width, height).
+        avg_times: Dict mapping dataset_name -> model_name -> avg time per epoch (seconds).
+        std_times: Optional dict of same shape with std deviations.
+        save_dir: Directory to save plots. If None, plots are not saved.
+        show: Whether to display plots.
+        dpi: DPI for saved figures.
     """
-    try:
-        import matplotlib.pyplot as plt
-    except ImportError:
-        print("matplotlib not installed.")
-        return
-
-    datasets = list(all_results.keys())
-    n_models = None
-    all_model_names = []
+    datasets = sorted(avg_times.keys())
 
     for dataset_name in datasets:
-        benchmark = all_results[dataset_name].get("benchmark", all_results[dataset_name])
-        model_names = list(benchmark.keys())
-        if n_models is None:
-            n_models = len(model_names)
-            all_model_names = model_names
-        elif set(model_names) != set(all_model_names):
-            all_model_names = list(set(all_model_names) | set(model_names))
+        model_names = sorted(avg_times[dataset_name].keys())
+        means = [avg_times[dataset_name][m] for m in model_names]
+        stds = [std_times[dataset_name][m] if std_times else 0.0 for m in model_names]
 
-    fig, axes = plt.subplots(1, 3, figsize=figsize)
-    colors = plt.cm.Set2(np.linspace(0, 1, max(n_models or 1, 1)))
+        fig, ax = plt.subplots(figsize=(10, 6))
+        colors = plt.cm.Set2(np.linspace(0, 1, len(model_names)))
+        x_pos = list(range(len(model_names)))
 
-    for ax, dataset_name in zip(axes, datasets):
-        benchmark = all_results[dataset_name].get("benchmark", all_results[dataset_name])
-        model_names = list(benchmark.keys())
+        bars = ax.bar(
+            x_pos,
+            means,
+            yerr=stds,
+            capsize=5,
+            color=colors,
+            alpha=0.8,
+            edgecolor="black",
+        )
 
-        avg_times = []
-        std_times = []
-
-        for model_name in model_names:
-            model_res = benchmark.get(model_name, {})
-            individual_runs = model_res.get("individual_runs", {})
-            histories = individual_runs.get("histories", [])
-
-            if histories:
-                all_epoch_times = []
-                for history in histories:
-                    if isinstance(history, dict) and "epoch_times" in history:
-                        all_epoch_times.extend(history["epoch_times"])
-                    elif isinstance(history, list):
-                        for h in history:
-                            if isinstance(h, dict) and "epoch_times" in h:
-                                all_epoch_times.extend(h["epoch_times"])
-
-                if all_epoch_times:
-                    avg_times.append(np.mean(all_epoch_times))
-                    std_times.append(np.std(all_epoch_times))
-                else:
-                    avg_times.append(0.0)
-                    std_times.append(0.0)
-            else:
-                avg_times.append(0.0)
-                std_times.append(0.0)
-
-        x_pos = np.arange(len(model_names))
-        bars = ax.bar(x_pos, avg_times, yerr=std_times, capsize=4,
-                      color=colors[:len(model_names)], alpha=0.8, edgecolor='black')
-        ax.set_xlabel('Model', fontsize=12)
-        ax.set_ylabel('Avg Time per Epoch (seconds)', fontsize=12)
-        ax.set_title(f'{dataset_name.upper()}', fontsize=14)
+        ax.set_xlabel("Model", fontsize=13)
+        ax.set_ylabel("Avg Time per Epoch (seconds)", fontsize=13)
+        ax.set_title(
+            f"Avg Training Time per Epoch — {dataset_name.upper()}", fontsize=14
+        )
         ax.set_xticks(x_pos)
-        ax.set_xticklabels([m.upper() for m in model_names], rotation=45, ha='right', fontsize=10)
-        ax.grid(axis='y', alpha=0.3)
+        ax.set_xticklabels([m.upper() for m in model_names], fontsize=11)
+        ax.grid(axis="y", alpha=0.3)
 
-        for bar, avg, std in zip(bars, avg_times, std_times):
-            if avg > 0:
-                ax.annotate(f'{avg:.3f}s',
-                            xy=(bar.get_x() + bar.get_width() / 2, avg + std),
-                            xytext=(0, 3),
-                            textcoords='offset points',
-                            ha='center', va='bottom', fontsize=8)
+        for bar, mean in zip(bars, means):
+            ax.annotate(
+                f"{mean:.3f}s",
+                xy=(bar.get_x() + bar.get_width() / 2, bar.get_height()),
+                xytext=(0, 5),
+                textcoords="offset points",
+                ha="center",
+                va="bottom",
+                fontsize=10,
+            )
 
-    plt.suptitle('Average Training Time per Epoch: Model Comparison', fontsize=16, fontweight='bold', y=1.02)
+        plt.tight_layout()
+
+        if save_dir:
+            out_path = os.path.join(
+                save_dir, f"{dataset_name}_model_time_comparison.png"
+            )
+            os.makedirs(save_dir, exist_ok=True)
+            plt.savefig(out_path, dpi=dpi, bbox_inches="tight")
+            print(f"Saved: {out_path}")
+
+        if show:
+            plt.show()
+
+        plt.close()
+
+
+# =============================================================================
+# Ablation: Residual vs Non-Residual
+# =============================================================================
+
+def plot_residual_comparison(
+    all_results: Dict[str, Dict[str, Any]],
+    save_dir: Optional[str] = None,
+    show: bool = False,
+    dpi: int = 150,
+) -> None:
+    """
+    Generate grouped bar charts comparing residual vs non-residual models.
+
+    Produces two figures:
+      1. Accuracy comparison per dataset (base vs +Res side by side)
+      2. Improvement (delta) bar chart per dataset
+      3. F1 comparison per dataset
+
+    Args:
+        all_results: Results dict from benchmark_residual_vs_base.
+        save_dir: Directory to save plots.
+        show: Whether to display plots.
+        dpi: DPI for saved figures.
+    """
+    model_pairs = {
+        "gcn": ("GCN", "GCN+Res"),
+        "gat": ("GAT", "GAT+Res"),
+        "sage": ("GraphSAGE", "GraphSAGE+Res"),
+        "appnp": ("APPNP", "APPNP+Res"),
+    }
+
+    datasets = sorted(all_results.keys())
+    base_models = [k for k in model_pairs.keys()]
+
+    # ── Figure 1: Accuracy Comparison ────────────────────────────────────────
+    fig, axes = plt.subplots(1, 3, figsize=(18, 6))
+    for ax, dataset_name in zip(axes, datasets):
+        comparison = all_results[dataset_name].get("comparison", {})
+        base_accs, res_accs, base_stds, res_stds = [], [], [], []
+        labels = []
+
+        for base_key in base_models:
+            if base_key not in comparison:
+                continue
+            res_key = "residual_" + base_key
+            base_accs.append(comparison[base_key]["accuracy_mean"])
+            res_accs.append(comparison[res_key]["accuracy_mean"])
+            base_stds.append(comparison[base_key]["accuracy_std"])
+            res_stds.append(comparison[res_key]["accuracy_std"])
+            labels.append(model_pairs[base_key][0])
+
+        x = np.arange(len(labels))
+        width = 0.35
+
+        bars1 = ax.bar(x - width / 2, base_accs, width, label="Base", color="#4C72B0", alpha=0.85, edgecolor="black")
+        bars2 = ax.bar(x + width / 2, res_accs, width, label="+Residual", color="#DD8452", alpha=0.85, edgecolor="black")
+
+        ax.errorbar(x - width / 2, base_accs, yerr=base_stds, fmt="none", color="black", capsize=4)
+        ax.errorbar(x + width / 2, res_accs, yerr=res_stds, fmt="none", color="black", capsize=4)
+
+        ax.set_ylabel("Accuracy", fontsize=12)
+        ax.set_title(f"{dataset_name.upper()}", fontsize=14)
+        ax.set_xticks(x)
+        ax.set_xticklabels(labels, fontsize=11)
+        ax.set_ylim(0, 1.05)
+        ax.grid(axis="y", alpha=0.3)
+        ax.legend(fontsize=10)
+
+        for bars in [bars1, bars2]:
+            for bar in bars:
+                ax.annotate(
+                    f"{bar.get_height():.3f}",
+                    xy=(bar.get_x() + bar.get_width() / 2, bar.get_height()),
+                    xytext=(0, 3),
+                    textcoords="offset points",
+                    ha="center",
+                    va="bottom",
+                    fontsize=8,
+                )
+
+    fig.suptitle("Residual vs Non-Residual: Accuracy Comparison", fontsize=16, fontweight="bold", y=1.02)
     plt.tight_layout()
 
-    if save_path:
-        os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        plt.savefig(save_path, dpi=dpi, bbox_inches='tight')
-        print(f"Avg epoch time comparison plot saved to: {save_path}")
+    if save_dir:
+        out_path = os.path.join(save_dir, "ablation_residual_accuracy.png")
+        plt.savefig(out_path, dpi=dpi, bbox_inches="tight")
+        print(f"Saved: {out_path}")
 
     if show:
         plt.show()
+    plt.close()
 
+    # ── Figure 2: Accuracy Improvement (Delta) ────────────────────────────────
+    fig, ax = plt.subplots(figsize=(10, 6))
+    x = np.arange(len(datasets))
+    width = 0.25
+    colors_imp = ["#55A868", "#8172B3", "#CCB974", "#E15759"]
+
+    for i, base_key in enumerate(base_models):
+        deltas = []
+        for dataset_name in datasets:
+            comparison = all_results[dataset_name].get("comparison", {})
+            if base_key not in comparison:
+                deltas.append(0.0)
+                continue
+            res_key = "residual_" + base_key
+            delta = comparison[res_key]["accuracy_mean"] - comparison[base_key]["accuracy_mean"]
+            deltas.append(delta)
+
+        bars = ax.bar(x + (i - 1) * width, deltas, width, label=model_pairs[base_key][0],
+                      color=colors_imp[i], alpha=0.85, edgecolor="black")
+
+        for bar, delta in zip(bars, deltas):
+            sign = "+" if delta >= 0 else ""
+            ax.annotate(
+                f"{sign}{delta:.3f}",
+                xy=(bar.get_x() + bar.get_width() / 2, bar.get_height()),
+                xytext=(0, 3),
+                textcoords="offset points",
+                ha="center",
+                va="bottom",
+                fontsize=9,
+                fontweight="bold",
+            )
+
+    ax.axhline(y=0, color="black", linewidth=0.8, linestyle="--")
+    ax.set_ylabel("Accuracy Improvement (Δ)", fontsize=12)
+    ax.set_xlabel("Dataset", fontsize=12)
+    ax.set_title("Residual Gain: Accuracy Improvement over Base Model", fontsize=14, fontweight="bold")
+    ax.set_xticks(x)
+    ax.set_xticklabels([d.upper() for d in datasets], fontsize=12)
+    ax.grid(axis="y", alpha=0.3)
+    ax.legend(fontsize=11)
+
+    plt.tight_layout()
+
+    if save_dir:
+        out_path = os.path.join(save_dir, "ablation_residual_improvement.png")
+        plt.savefig(out_path, dpi=dpi, bbox_inches="tight")
+        print(f"Saved: {out_path}")
+
+    if show:
+        plt.show()
+    plt.close()
+
+    # ── Figure 3: F1 Score Comparison ─────────────────────────────────────────
+    fig, axes = plt.subplots(1, 3, figsize=(18, 6))
+    for ax, dataset_name in zip(axes, datasets):
+        comparison = all_results[dataset_name].get("comparison", {})
+        base_f1s, res_f1s, base_stds, res_stds = [], [], [], []
+        labels = []
+
+        for base_key in base_models:
+            if base_key not in comparison:
+                continue
+            res_key = "residual_" + base_key
+            base_f1s.append(comparison[base_key]["f1_mean"])
+            res_f1s.append(comparison[res_key]["f1_mean"])
+            base_stds.append(comparison[base_key]["f1_std"])
+            res_stds.append(comparison[res_key]["f1_std"])
+            labels.append(model_pairs[base_key][0])
+
+        x = np.arange(len(labels))
+        width = 0.35
+
+        bars1 = ax.bar(x - width / 2, base_f1s, width, label="Base", color="#4C72B0", alpha=0.85, edgecolor="black")
+        bars2 = ax.bar(x + width / 2, res_f1s, width, label="+Residual", color="#DD8452", alpha=0.85, edgecolor="black")
+
+        ax.errorbar(x - width / 2, base_f1s, yerr=base_stds, fmt="none", color="black", capsize=4)
+        ax.errorbar(x + width / 2, res_f1s, yerr=res_stds, fmt="none", color="black", capsize=4)
+
+        ax.set_ylabel("F1 Score", fontsize=12)
+        ax.set_title(f"{dataset_name.upper()}", fontsize=14)
+        ax.set_xticks(x)
+        ax.set_xticklabels(labels, fontsize=11)
+        ax.set_ylim(0, 1.05)
+        ax.grid(axis="y", alpha=0.3)
+        ax.legend(fontsize=10)
+
+        for bars in [bars1, bars2]:
+            for bar in bars:
+                ax.annotate(
+                    f"{bar.get_height():.3f}",
+                    xy=(bar.get_x() + bar.get_width() / 2, bar.get_height()),
+                    xytext=(0, 3),
+                    textcoords="offset points",
+                    ha="center",
+                    va="bottom",
+                    fontsize=8,
+                )
+
+    fig.suptitle("Residual vs Non-Residual: F1 Score Comparison", fontsize=16, fontweight="bold", y=1.02)
+    plt.tight_layout()
+
+    if save_dir:
+        out_path = os.path.join(save_dir, "ablation_residual_f1.png")
+        plt.savefig(out_path, dpi=dpi, bbox_inches="tight")
+        print(f"Saved: {out_path}")
+
+    if show:
+        plt.show()
+    plt.close()
+
+
+# =============================================================================
+# Ablation: Residual — Twin Bar Chart (Acc + F1 side-by-side per dataset)
+# =============================================================================
+
+def plot_residual_twin_comparison(
+    all_results: Dict[str, Dict[str, Any]],
+    save_dir: Optional[str] = None,
+    show: bool = False,
+    dpi: int = 150,
+) -> None:
+    """
+    Generate twin grouped bar charts — one plot per dataset, showing
+    both Accuracy and F1 Score for each model (Base and +Residual)
+    side-by-side in a single cohesive figure.
+
+    Produces 3 figures (one per dataset):
+      - Left subplot: Accuracy
+      - Right subplot: F1 Score
+
+    Args:
+        all_results: Results dict from benchmark_residual_vs_base.
+        save_dir: Directory to save plots.
+        show: Whether to display plots.
+        dpi: DPI for saved figures.
+    """
+    model_pairs = {
+        "gcn": ("GCN", "GCN+Res"),
+        "gat": ("GAT", "GAT+Res"),
+        "sage": ("GraphSAGE", "GraphSAGE+Res"),
+        "appnp": ("APPNP", "APPNP+Res"),
+    }
+
+    datasets = sorted(all_results.keys())
+    base_models = [k for k in model_pairs.keys()]
+
+    for dataset_name in datasets:
+        comparison = all_results[dataset_name].get("comparison", {})
+
+        model_labels = []
+        acc_base, acc_res, acc_std_base, acc_std_res = [], [], [], []
+        f1_base, f1_res, f1_std_base, f1_std_res = [], [], [], []
+
+        for base_key in base_models:
+            if base_key not in comparison:
+                continue
+            res_key = "residual_" + base_key
+            if res_key not in comparison:
+                continue
+
+            model_labels.append(model_pairs[base_key][0])
+
+            acc_base.append(comparison[base_key]["accuracy_mean"])
+            acc_res.append(comparison[res_key]["accuracy_mean"])
+            acc_std_base.append(comparison[base_key]["accuracy_std"])
+            acc_std_res.append(comparison[res_key]["accuracy_std"])
+
+            f1_base.append(comparison[base_key]["f1_mean"])
+            f1_res.append(comparison[res_key]["f1_mean"])
+            f1_std_base.append(comparison[base_key]["f1_std"])
+            f1_std_res.append(comparison[res_key]["f1_std"])
+
+        n_models = len(model_labels)
+        x = np.arange(n_models)
+        width = 0.18
+
+        # Colors
+        c_base = "#4C72B0"
+        c_res = "#DD8452"
+        c_acc = "#2E86AB"
+        c_f1 = "#A23B72"
+
+        fig, (ax_acc, ax_f1) = plt.subplots(1, 2, figsize=(16, 6))
+
+        # ── Left: Accuracy ────────────────────────────────────────────────────
+        bars_acc_b = ax_acc.bar(x - 1.5 * width, acc_base, width,
+                                label="Base", color=c_base, alpha=0.85, edgecolor="black")
+        bars_acc_r = ax_acc.bar(x - 0.5 * width, acc_res, width,
+                                label="+Residual", color=c_res, alpha=0.85, edgecolor="black")
+
+        ax_acc.errorbar(x - 1.5 * width, acc_base, yerr=acc_std_base,
+                        fmt="none", color="black", capsize=3)
+        ax_acc.errorbar(x - 0.5 * width, acc_res, yerr=acc_std_res,
+                        fmt="none", color="black", capsize=3)
+
+        # Value labels
+        for bars in [bars_acc_b, bars_acc_r]:
+            for bar in bars:
+                ax_acc.annotate(
+                    f"{bar.get_height():.3f}",
+                    xy=(bar.get_x() + bar.get_width() / 2, bar.get_height()),
+                    xytext=(0, 2),
+                    textcoords="offset points",
+                    ha="center", va="bottom", fontsize=7.5,
+                )
+
+        ax_acc.set_ylabel("Accuracy", fontsize=13, color=c_acc)
+        ax_acc.set_title("Accuracy", fontsize=14, fontweight="bold", color=c_acc)
+        ax_acc.set_xticks(x)
+        ax_acc.set_xticklabels(model_labels, fontsize=11)
+        ax_acc.set_ylim(0, 1.08)
+        ax_acc.grid(axis="y", alpha=0.3)
+        ax_acc.legend(fontsize=10, loc="lower right")
+
+        # Color the tick labels to match bars
+        for i, label in enumerate(ax_acc.get_xticklabels()):
+            label.set_color(c_base if i % 2 == 0 else c_res)
+
+        # ── Right: F1 Score ──────────────────────────────────────────────────
+        bars_f1_b = ax_f1.bar(x + 0.5 * width, f1_base, width,
+                              label="Base", color=c_base, alpha=0.85, edgecolor="black")
+        bars_f1_r = ax_f1.bar(x + 1.5 * width, f1_res, width,
+                              label="+Residual", color=c_res, alpha=0.85, edgecolor="black")
+
+        ax_f1.errorbar(x + 0.5 * width, f1_base, yerr=f1_std_base,
+                       fmt="none", color="black", capsize=3)
+        ax_f1.errorbar(x + 1.5 * width, f1_res, yerr=f1_std_res,
+                       fmt="none", color="black", capsize=3)
+
+        for bars in [bars_f1_b, bars_f1_r]:
+            for bar in bars:
+                ax_f1.annotate(
+                    f"{bar.get_height():.3f}",
+                    xy=(bar.get_x() + bar.get_width() / 2, bar.get_height()),
+                    xytext=(0, 2),
+                    textcoords="offset points",
+                    ha="center", va="bottom", fontsize=7.5,
+                )
+
+        ax_f1.set_ylabel("F1 Score", fontsize=13, color=c_f1)
+        ax_f1.set_title("F1 Score", fontsize=14, fontweight="bold", color=c_f1)
+        ax_f1.set_xticks(x)
+        ax_f1.set_xticklabels(model_labels, fontsize=11)
+        ax_f1.set_ylim(0, 1.08)
+        ax_f1.grid(axis="y", alpha=0.3)
+        ax_f1.legend(fontsize=10, loc="lower right")
+
+        for i, label in enumerate(ax_f1.get_xticklabels()):
+            label.set_color(c_base if i % 2 == 0 else c_res)
+
+        # Per-dataset title
+        fig.suptitle(
+            f"Residual vs Non-Residual — {dataset_name.upper()}\nAccuracy & F1 Score Comparison",
+            fontsize=15,
+            fontweight="bold",
+            y=1.02,
+        )
+        plt.tight_layout()
+
+        if save_dir:
+            out_path = os.path.join(save_dir, f"ablation_residual_twin_{dataset_name}.png")
+            plt.savefig(out_path, dpi=dpi, bbox_inches="tight")
+            print(f"Saved: {out_path}")
+
+        if show:
+            plt.show()
+        plt.close()
+
+
+# =============================================================================
+# Ablation: Oversmoothing (Layer Depth)
+# =============================================================================
+
+def plot_oversmoothing_comparison(
+    all_results: Dict[str, Dict[str, Any]],
+    layer_counts: Optional[List[int]] = None,
+    models: Optional[List[str]] = None,
+    save_dir: Optional[str] = None,
+    show: bool = False,
+    dpi: int = 150,
+) -> None:
+    """
+    Generate line plots and heatmaps showing how accuracy changes with depth.
+
+    Produces:
+      1. Line plot: Accuracy vs Layers per model, per dataset (one figure)
+      2. Heatmap: Accuracy across models x layers, per dataset
+
+    Args:
+        all_results: Results dict from benchmark_layers.
+        layer_counts: List of layer counts used.
+        models: List of model names.
+        save_dir: Directory to save plots.
+        show: Whether to display plots.
+        dpi: DPI for saved figures.
+    """
+    layer_counts = layer_counts or [2, 4, 8]
+    datasets = sorted(all_results.keys())
+
+    model_display = {
+        "gcn": "GCN",
+        "residual_gcn": "GCN+Res",
+        "gat": "GAT",
+        "residual_gat": "GAT+Res",
+        "sage": "GraphSAGE",
+        "residual_sage": "GraphSAGE+Res",
+        "appnp": "APPNP",
+        "residual_appnp": "APPNP+Res",
+    }
+    model_colors = {
+        "gcn": "#4C72B0",
+        "residual_gcn": "#4C72B0",
+        "gat": "#55A868",
+        "residual_gat": "#55A868",
+        "sage": "#CCB974",
+        "residual_sage": "#CCB974",
+        "appnp": "#E15759",
+        "residual_appnp": "#E15759",
+    }
+    model_linestyle = {
+        "gcn": "-",
+        "residual_gcn": "--",
+        "gat": "-",
+        "residual_gat": "--",
+        "sage": "-",
+        "residual_sage": "--",
+        "appnp": "-",
+        "residual_appnp": "--",
+    }
+
+    # ── Figure 1: Line Plot — Accuracy vs Layers ─────────────────────────────
+    fig, axes = plt.subplots(1, 3, figsize=(18, 6))
+    for ax, dataset_name in zip(axes, datasets):
+        layers_data = all_results[dataset_name].get("layers", {})
+
+        for model_name in models:
+            if model_name not in layers_data:
+                continue
+            accs = []
+            stds = []
+            for lc in layer_counts:
+                entry = layers_data[model_name].get(lc, {})
+                accs.append(entry.get("accuracy_mean", 0.0))
+                stds.append(entry.get("accuracy_std", 0.0))
+
+            color = model_colors.get(model_name, "gray")
+            ls = model_linestyle.get(model_name, "-")
+            label = model_display.get(model_name, model_name)
+
+            ax.plot(
+                layer_counts,
+                accs,
+                marker="o",
+                linewidth=2.5,
+                linestyle=ls,
+                label=label,
+                color=color,
+                alpha=0.9,
+            )
+            ax.fill_between(
+                layer_counts,
+                [a - s for a, s in zip(accs, stds)],
+                [a + s for a, s in zip(accs, stds)],
+                alpha=0.15,
+                color=color,
+            )
+
+        ax.set_xlabel("Number of Layers", fontsize=12)
+        ax.set_ylabel("Accuracy", fontsize=12)
+        ax.set_title(f"{dataset_name.upper()}", fontsize=14)
+        ax.set_xticks(layer_counts)
+        ax.set_xticklabels([str(lc) for lc in layer_counts], fontsize=11)
+        ax.set_ylim(0, 1.05)
+        ax.grid(True, alpha=0.3)
+        ax.legend(fontsize=9, loc="best")
+
+    fig.suptitle(
+        "Oversmoothing Analysis: Accuracy vs Number of Layers",
+        fontsize=16,
+        fontweight="bold",
+        y=1.02,
+    )
+    plt.tight_layout()
+
+    if save_dir:
+        out_path = os.path.join(save_dir, "ablation_oversmoothing_line.png")
+        plt.savefig(out_path, dpi=dpi, bbox_inches="tight")
+        print(f"Saved: {out_path}")
+
+    if show:
+        plt.show()
+    plt.close()
+
+    # ── Figure 2: Heatmap — Accuracy across Models × Layers ─────────────────
+    for dataset_name in datasets:
+        fig, ax = plt.subplots(figsize=(10, 6))
+
+        layers_data = all_results[dataset_name].get("layers", {})
+        model_names_filtered = [m for m in models if m in layers_data]
+
+        matrix = []
+        for model_name in model_names_filtered:
+            row = []
+            for lc in layer_counts:
+                entry = layers_data[model_name].get(lc, {})
+                row.append(entry.get("accuracy_mean", 0.0))
+            matrix.append(row)
+
+        matrix = np.array(matrix)
+
+        im = ax.imshow(
+            matrix,
+            cmap="RdYlGn",
+            aspect="auto",
+            vmin=0.4,
+            vmax=1.0,
+        )
+
+        ax.set_xticks(range(len(layer_counts)))
+        ax.set_xticklabels([f"L{lc}" for lc in layer_counts], fontsize=12)
+        ax.set_yticks(range(len(model_names_filtered)))
+        ax.set_yticklabels(
+            [model_display.get(m, m.upper()) for m in model_names_filtered], fontsize=11
+        )
+
+        for i in range(len(model_names_filtered)):
+            for j in range(len(layer_counts)):
+                text = ax.text(
+                    j,
+                    i,
+                    f"{matrix[i, j]:.3f}",
+                    ha="center",
+                    va="center",
+                    color="black",
+                    fontsize=11,
+                    fontweight="bold",
+                )
+
+        ax.set_xlabel("Number of Layers", fontsize=13)
+        ax.set_ylabel("Model", fontsize=13)
+        ax.set_title(
+            f"Oversmoothing Heatmap — {dataset_name.upper()}",
+            fontsize=14,
+            fontweight="bold",
+        )
+
+        cbar = fig.colorbar(im, ax=ax, shrink=0.8)
+        cbar.set_label("Accuracy", fontsize=11)
+
+        plt.tight_layout()
+
+        if save_dir:
+            out_path = os.path.join(
+                save_dir, f"ablation_oversmoothing_heatmap_{dataset_name}.png"
+            )
+            plt.savefig(out_path, dpi=dpi, bbox_inches="tight")
+            print(f"Saved: {out_path}")
+
+        if show:
+            plt.show()
+        plt.close()
+
+    # ── Figure 3: Bar chart — Accuracy drop from L2 to L8 ─────────────────
+    fig, ax = plt.subplots(figsize=(12, 6))
+    drop_data = {}
+
+    for model_name in models:
+        l2_accs = []
+        l8_accs = []
+        for dataset_name in datasets:
+            layers_data = all_results[dataset_name].get("layers", {})
+            if model_name not in layers_data:
+                continue
+            l2 = layers_data[model_name].get(2, {}).get("accuracy_mean", 0.0)
+            l8 = layers_data[model_name].get(8, {}).get("accuracy_mean", 0.0)
+            l2_accs.append(l2)
+            l8_accs.append(l8)
+
+        if l2_accs:
+            drop_data[model_name] = np.mean(l8_accs) - np.mean(l2_accs)
+
+    model_names = list(drop_data.keys())
+    drops = [drop_data[m] for m in model_names]
+    colors = [
+        (
+            "#E15759" if d < -0.05
+            else "#59A14F" if d > 0.01
+            else "#F1E457"
+        )
+        for d in drops
+    ]
+    labels = [model_display.get(m, m.upper()) for m in model_names]
+
+    x = np.arange(len(labels))
+    bars = ax.bar(x, drops, color=colors, alpha=0.85, edgecolor="black")
+
+    ax.axhline(y=0, color="black", linewidth=0.8, linestyle="--")
+    ax.set_ylabel("Accuracy Change (L8 − L2)", fontsize=12)
+    ax.set_xlabel("Model", fontsize=12)
+    ax.set_title(
+        "Oversmoothing Impact: Accuracy Change from 2 to 8 Layers\n(negative = oversmoothing)",
+        fontsize=13,
+        fontweight="bold",
+    )
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels, fontsize=11)
+    ax.grid(axis="y", alpha=0.3)
+
+    for bar, drop in zip(bars, drops):
+        sign = "+" if drop >= 0 else ""
+        ax.annotate(
+            f"{sign}{drop:.3f}",
+            xy=(bar.get_x() + bar.get_width() / 2, bar.get_height()),
+            xytext=(0, 3),
+            textcoords="offset points",
+            ha="center",
+            va="bottom",
+            fontsize=10,
+            fontweight="bold",
+        )
+
+    from matplotlib.patches import Patch
+    legend_elements = [
+        Patch(facecolor="#E15759", alpha=0.85, label="Significant Drop (> 0.05)"),
+        Patch(facecolor="#F1E457", alpha=0.85, label="Minimal Change"),
+        Patch(facecolor="#59A14F", alpha=0.85, label="Improved/Stable"),
+    ]
+    ax.legend(handles=legend_elements, fontsize=10)
+
+    plt.tight_layout()
+
+    if save_dir:
+        out_path = os.path.join(save_dir, "ablation_oversmoothing_drop.png")
+        plt.savefig(out_path, dpi=dpi, bbox_inches="tight")
+        print(f"Saved: {out_path}")
+
+    if show:
+        plt.show()
     plt.close()
