@@ -191,13 +191,16 @@ def create_masks(
 
 def create_model(name, in_channels, out_channels, hyperparams):
     """Create a model by name."""
+    norm_val = hyperparams.get("norm", "layer")
+    norm_val = None if norm_val == "none" else norm_val
+
     common_kwargs = {
         "in_channels": in_channels,
         "hidden_channels": hyperparams.get("hidden_channels", 128),
         "num_layers": hyperparams.get("num_layers", 2),
         "out_channels": out_channels,
         "dropout": hyperparams.get("dropout", 0.5),
-        "norm": hyperparams.get("norm", "layer"),
+        "norm": norm_val,
     }
 
     if 'gcn' == name:
