@@ -76,7 +76,7 @@ HYPERPARAM_GRID = {
 
 HYPERPARAM_RANDOM_DIST = {
     "hidden_channels": lambda: random.choice([32, 64, 128, 256, 512]),
-    "num_layers": lambda: random.choice([2, 3, 4, 5, 6]),
+    "num_layers": lambda: random.choice([2]),
     "dropout": lambda: random.uniform(0.1, 0.8),
     "norm": lambda: random.choice(["layer", "batch", "graph", "none"]),
     "lr": lambda: 10 ** random.uniform(-4, -2),

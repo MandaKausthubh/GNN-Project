@@ -721,3 +721,397 @@ def plot_oversmoothing_comparison(
     if show:
         plt.show()
     plt.close()
+
+
+# =============================================================================
+# Robustness: Accuracy Degradation Under Edge Removal
+# =============================================================================
+
+def plot_robustness_comparison(
+    all_results: Dict[str, Dict[str, Any]],
+    removal_fractions: Optional[List[float]] = None,
+    models: Optional[List[str]] = None,
+    save_dir: Optional[str] = None,
+    show: bool = False,
+    dpi: int = 150,
+) -> None:
+    """
+    Generate comprehensive robustness analysis plots.
+
+    Produces:
+      1. Line plot — Accuracy degradation per dataset (all models)
+      2. Line plot — F1 score degradation per dataset (all models)
+      3. Grouped bar chart — Accuracy at each removal level per dataset
+      4. Heatmap — Accuracy across models x removal fractions per dataset
+      5. Normalized degradation (relative to 0%% removal) per dataset
+      6. Summary bar — Area Under Curve (AUC) of degradation per model/dataset
+
+    Args:
+        all_results: Results dict from benchmark_robustness.
+        removal_fractions: List of removal fractions tested.
+        models: List of model names to include.
+        save_dir: Directory to save plots.
+        show: Whether to display plots.
+        dpi: DPI for saved figures.
+    """
+    removal_fractions = removal_fractions or [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
+    datasets = sorted(all_results.keys())
+    models = models or []
+
+    model_display = {
+        "gcn": "GCN",
+        "gat": "GAT",
+        "sage": "GraphSAGE",
+        "appnp": "APPNP",
+        "residual_gcn": "GCN+Res",
+        "residual_gat": "GAT+Res",
+        "residual_sage": "GraphSAGE+Res",
+        "residual_appnp": "APPNP+Res",
+    }
+    model_colors = {
+        "gcn": "#4C72B0",
+        "gat": "#55A868",
+        "sage": "#CCB974",
+        "appnp": "#E15759",
+        "residual_gcn": "#4C72B0",
+        "residual_gat": "#55A868",
+        "residual_sage": "#CCB974",
+        "residual_appnp": "#E15759",
+    }
+    model_linestyle = {
+        "gcn": "-",
+        "gat": "-",
+        "sage": "-",
+        "appnp": "-",
+        "residual_gcn": "--",
+        "residual_gat": "--",
+        "residual_sage": "--",
+        "residual_appnp": "--",
+    }
+    model_marker = {
+        "gcn": "o",
+        "gat": "s",
+        "sage": "^",
+        "appnp": "D",
+        "residual_gcn": "o",
+        "residual_gat": "s",
+        "residual_sage": "^",
+        "residual_appnp": "D",
+    }
+
+    frac_labels = [f"{int(f*100)}%%" for f in removal_fractions]
+    x_vals = [f * 100 for f in removal_fractions]
+
+    # ── Figure 1: Accuracy Degradation Line Plot (per dataset) ───────────────
+    fig, axes = plt.subplots(1, 3, figsize=(18, 6))
+    for ax, dataset_name in zip(axes, datasets):
+        removals = all_results[dataset_name].get("removals", {})
+
+        for model_name in models:
+            if model_name not in removals:
+                continue
+            accs = []
+            stds = []
+            for frac in removal_fractions:
+                entry = removals[model_name].get(frac, {})
+                accs.append(entry.get("accuracy_mean", 0.0))
+                stds.append(entry.get("accuracy_std", 0.0))
+
+            color = model_colors.get(model_name, "gray")
+            ls = model_linestyle.get(model_name, "-")
+            mk = model_marker.get(model_name, "o")
+            label = model_display.get(model_name, model_name)
+
+            ax.plot(
+                x_vals, accs,
+                marker=mk, linestyle=ls, linewidth=2.2,
+                label=label, color=color, alpha=0.85,
+                markersize=7,
+            )
+            ax.fill_between(
+                x_vals,
+                [a - s for a, s in zip(accs, stds)],
+                [a + s for a, s in zip(accs, stds)],
+                alpha=0.12, color=color,
+            )
+
+        ax.set_xlabel("Edges Removed (%%)", fontsize=12)
+        ax.set_ylabel("Accuracy", fontsize=12)
+        ax.set_title(f"{dataset_name.upper()}", fontsize=14)
+        ax.set_xticks(x_vals)
+        ax.set_xticklabels(frac_labels, fontsize=10)
+        ax.set_ylim(0, 1.05)
+        ax.grid(True, alpha=0.3)
+        ax.legend(fontsize=8, loc="lower left")
+
+    fig.suptitle(
+        "Robustness: Accuracy Degradation Under Edge Removal",
+        fontsize=15, fontweight="bold", y=1.02,
+    )
+    plt.tight_layout()
+
+    if save_dir:
+        out_path = os.path.join(save_dir, "robustness_accuracy_degradation.png")
+        plt.savefig(out_path, dpi=dpi, bbox_inches="tight")
+        print(f"Saved: {out_path}")
+    if show:
+        plt.show()
+    plt.close()
+
+    # ── Figure 2: F1 Score Degradation Line Plot (per dataset) ──────────────
+    fig, axes = plt.subplots(1, 3, figsize=(18, 6))
+    for ax, dataset_name in zip(axes, datasets):
+        removals = all_results[dataset_name].get("removals", {})
+
+        for model_name in models:
+            if model_name not in removals:
+                continue
+            f1s = []
+            stds = []
+            for frac in removal_fractions:
+                entry = removals[model_name].get(frac, {})
+                f1s.append(entry.get("f1_mean", 0.0))
+                stds.append(entry.get("f1_std", 0.0))
+
+            color = model_colors.get(model_name, "gray")
+            ls = model_linestyle.get(model_name, "-")
+            mk = model_marker.get(model_name, "o")
+            label = model_display.get(model_name, model_name)
+
+            ax.plot(
+                x_vals, f1s,
+                marker=mk, linestyle=ls, linewidth=2.2,
+                label=label, color=color, alpha=0.85,
+                markersize=7,
+            )
+            ax.fill_between(
+                x_vals,
+                [f - s for f, s in zip(f1s, stds)],
+                [f + s for f, s in zip(f1s, stds)],
+                alpha=0.12, color=color,
+            )
+
+        ax.set_xlabel("Edges Removed (%%)", fontsize=12)
+        ax.set_ylabel("F1 Score", fontsize=12)
+        ax.set_title(f"{dataset_name.upper()}", fontsize=14)
+        ax.set_xticks(x_vals)
+        ax.set_xticklabels(frac_labels, fontsize=10)
+        ax.set_ylim(0, 1.05)
+        ax.grid(True, alpha=0.3)
+        ax.legend(fontsize=8, loc="lower left")
+
+    fig.suptitle(
+        "Robustness: F1 Score Degradation Under Edge Removal",
+        fontsize=15, fontweight="bold", y=1.02,
+    )
+    plt.tight_layout()
+
+    if save_dir:
+        out_path = os.path.join(save_dir, "robustness_f1_degradation.png")
+        plt.savefig(out_path, dpi=dpi, bbox_inches="tight")
+        print(f"Saved: {out_path}")
+    if show:
+        plt.show()
+    plt.close()
+
+    # ── Figure 3: Grouped Bar Chart — Accuracy per Removal Level per Dataset ─
+    fig, axes = plt.subplots(1, 3, figsize=(18, 6))
+    n_models = len(models)
+    bar_width = 0.8 / max(n_models, 1)
+
+    for ax, dataset_name in zip(axes, datasets):
+        removals = all_results[dataset_name].get("removals", {})
+        x = np.arange(len(removal_fractions))
+
+        for i, model_name in enumerate(models):
+            if model_name not in removals:
+                continue
+            accs = [removals[model_name].get(frac, {}).get("accuracy_mean", 0.0) for frac in removal_fractions]
+            stds = [removals[model_name].get(frac, {}).get("accuracy_std", 0.0) for frac in removal_fractions]
+            color = model_colors.get(model_name, "gray")
+            offset = (i - n_models / 2 + 0.5) * bar_width
+            bars = ax.bar(x + offset, accs, bar_width, label=model_display.get(model_name, model_name),
+                          color=color, alpha=0.85, edgecolor="black", linewidth=0.5)
+            ax.errorbar(x + offset, accs, yerr=stds, fmt="none", color="black", capsize=3)
+
+        ax.set_xlabel("Edges Removed", fontsize=12)
+        ax.set_ylabel("Accuracy", fontsize=12)
+        ax.set_title(f"{dataset_name.upper()}", fontsize=14)
+        ax.set_xticks(x)
+        ax.set_xticklabels(frac_labels, fontsize=10)
+        ax.set_ylim(0, 1.08)
+        ax.grid(axis="y", alpha=0.3)
+        ax.legend(fontsize=7.5, loc="lower left")
+
+    fig.suptitle(
+        "Robustness: Accuracy at Each Edge Removal Level",
+        fontsize=15, fontweight="bold", y=1.02,
+    )
+    plt.tight_layout()
+
+    if save_dir:
+        out_path = os.path.join(save_dir, "robustness_bar_accuracy.png")
+        plt.savefig(out_path, dpi=dpi, bbox_inches="tight")
+        print(f"Saved: {out_path}")
+    if show:
+        plt.show()
+    plt.close()
+
+    # ── Figure 4: Heatmap — Accuracy across Models × Removal Fractions ─────────
+    for dataset_name in datasets:
+        fig, ax = plt.subplots(figsize=(10, 7))
+        removals = all_results[dataset_name].get("removals", {})
+        model_filtered = [m for m in models if m in removals]
+
+        matrix = []
+        for model_name in model_filtered:
+            row = [removals[model_name].get(frac, {}).get("accuracy_mean", 0.0) for frac in removal_fractions]
+            matrix.append(row)
+
+        matrix = np.array(matrix)
+        vmin = max(0.0, np.nanmin(matrix) - 0.05)
+        vmax = min(1.0, np.nanmax(matrix) + 0.05)
+
+        im = ax.imshow(matrix, cmap="RdYlGn", aspect="auto", vmin=vmin, vmax=vmax)
+
+        ax.set_xticks(range(len(removal_fractions)))
+        ax.set_xticklabels(frac_labels, fontsize=12)
+        ax.set_yticks(range(len(model_filtered)))
+        ax.set_yticklabels([model_display.get(m, m.upper()) for m in model_filtered], fontsize=11)
+
+        for i in range(len(model_filtered)):
+            for j in range(len(removal_fractions)):
+                val = matrix[i, j]
+                color = "white" if val < (vmin + vmax) / 2 else "black"
+                ax.text(j, i, f"{val:.3f}", ha="center", va="center",
+                        color=color, fontsize=12, fontweight="bold")
+
+        ax.set_xlabel("Edges Removed (%%)", fontsize=13)
+        ax.set_ylabel("Model", fontsize=13)
+        ax.set_title(
+            f"Robustness Heatmap — {dataset_name.upper()}\n(Accuracy at each edge removal level)",
+            fontsize=13, fontweight="bold",
+        )
+
+        cbar = fig.colorbar(im, ax=ax, shrink=0.85)
+        cbar.set_label("Accuracy", fontsize=11)
+
+        plt.tight_layout()
+        if save_dir:
+            out_path = os.path.join(save_dir, f"robustness_heatmap_{dataset_name}.png")
+            plt.savefig(out_path, dpi=dpi, bbox_inches="tight")
+            print(f"Saved: {out_path}")
+        if show:
+            plt.show()
+        plt.close()
+
+    # ── Figure 5: Normalized Degradation (relative to 0%% removal) ────────────
+    fig, axes = plt.subplots(1, 3, figsize=(18, 6))
+    for ax, dataset_name in zip(axes, datasets):
+        removals = all_results[dataset_name].get("removals", {})
+
+        for model_name in models:
+            if model_name not in removals:
+                continue
+
+            baseline = removals[model_name].get(0.0, {}).get("accuracy_mean", 1.0)
+            if baseline == 0:
+                continue
+
+            norm_accs = []
+            for frac in removal_fractions:
+                entry = removals[model_name].get(frac, {})
+                acc = entry.get("accuracy_mean", 0.0)
+                norm_accs.append(acc / baseline)
+
+            color = model_colors.get(model_name, "gray")
+            ls = model_linestyle.get(model_name, "-")
+            mk = model_marker.get(model_name, "o")
+            label = model_display.get(model_name, model_name)
+
+            ax.plot(
+                x_vals, norm_accs,
+                marker=mk, linestyle=ls, linewidth=2.2,
+                label=label, color=color, alpha=0.85, markersize=7,
+            )
+
+        ax.axhline(y=1.0, color="gray", linewidth=1.0, linestyle="--", alpha=0.7)
+        ax.set_xlabel("Edges Removed (%%)", fontsize=12)
+        ax.set_ylabel("Normalized Accuracy (rel. to 0%% removal)", fontsize=11)
+        ax.set_title(f"{dataset_name.upper()}", fontsize=14)
+        ax.set_xticks(x_vals)
+        ax.set_xticklabels(frac_labels, fontsize=10)
+        ax.set_ylim(0.4, 1.08)
+        ax.grid(True, alpha=0.3)
+        ax.legend(fontsize=8, loc="lower left")
+
+    fig.suptitle(
+        "Robustness: Normalized Accuracy Degradation\n(Accuracy relative to original graph)",
+        fontsize=14, fontweight="bold", y=1.02,
+    )
+    plt.tight_layout()
+
+    if save_dir:
+        out_path = os.path.join(save_dir, "robustness_normalized_degradation.png")
+        plt.savefig(out_path, dpi=dpi, bbox_inches="tight")
+        print(f"Saved: {out_path}")
+    if show:
+        plt.show()
+    plt.close()
+
+    # ── Figure 6: AUC / Total Drop Summary Bar Chart ─────────────────────────
+    fig, axes = plt.subplots(1, 3, figsize=(18, 6))
+    for ax, dataset_name in zip(axes, datasets):
+        removals = all_results[dataset_name].get("removals", {})
+        model_aucs = {}
+
+        for model_name in models:
+            if model_name not in removals:
+                continue
+
+            accs = []
+            for frac in removal_fractions:
+                accs.append(removals[model_name].get(frac, {}).get("accuracy_mean", 0.0))
+
+            # Compute AUC (normalized: max possible = len(fracs))
+            if len(accs) >= 2:
+                auc = np.trapz(accs, x=x_vals) / (x_vals[-1] - x_vals[0]) if x_vals[-1] != x_vals[0] else accs[0]
+            else:
+                auc = accs[0] if accs else 0.0
+            model_aucs[model_name] = auc
+
+        model_names = list(model_aucs.keys())
+        aucs = list(model_aucs.values())
+        colors = [model_colors.get(m, "gray") for m in model_names]
+        x = np.arange(len(model_names))
+
+        bars = ax.bar(x, aucs, color=colors, alpha=0.85, edgecolor="black")
+        ax.set_ylabel("AUC (Area Under Degradation Curve)", fontsize=11)
+        ax.set_title(f"{dataset_name.upper()}", fontsize=14)
+        ax.set_xticks(x)
+        ax.set_xticklabels([model_display.get(m, m.upper()) for m in model_names], fontsize=9, rotation=30, ha="right")
+        ax.set_ylim(0, 1.08)
+        ax.grid(axis="y", alpha=0.3)
+
+        for bar, auc_val in zip(bars, aucs):
+            ax.annotate(
+                f"{auc_val:.3f}",
+                xy=(bar.get_x() + bar.get_width() / 2, bar.get_height()),
+                xytext=(0, 3),
+                textcoords="offset points",
+                ha="center", va="bottom", fontsize=9,
+            )
+
+    fig.suptitle(
+        "Robustness Summary: AUC of Accuracy Degradation Curve\n(Higher = more robust)",
+        fontsize=14, fontweight="bold", y=1.02,
+    )
+    plt.tight_layout()
+
+    if save_dir:
+        out_path = os.path.join(save_dir, "robustness_auc_summary.png")
+        plt.savefig(out_path, dpi=dpi, bbox_inches="tight")
+        print(f"Saved: {out_path}")
+    if show:
+        plt.show()
+    plt.close()
