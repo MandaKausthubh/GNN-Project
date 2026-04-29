@@ -202,6 +202,7 @@ class Trainer:
         val_every: int = 1,
         print_every: int = 10,
         use_tqdm: bool = True,
+        verbose: bool = True,
     ) -> Dict[str, List[float]]:
         """
         Full training loop.
@@ -296,7 +297,7 @@ class Trainer:
                 pbar.set_postfix_str(" | ".join(postfix_parts))
                 pbar.update(1)
             # Print progress (non-tqdm mode)
-            elif epoch % print_every == 0 or epoch == 1:
+            elif (epoch % print_every == 0 or epoch == 1) and verbose:
                 val_str = f"| Val Loss: {val_loss:.4f} | Val Acc: {val_acc:.4f}" if should_validate else ""
                 print(f"Epoch {epoch:3d}/{epochs} | Train Loss: {train_loss:.4f} | Train Acc: {train_acc:.4f} | LR: {current_lr:.2e} {val_str}")
 
