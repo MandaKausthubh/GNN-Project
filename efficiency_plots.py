@@ -311,6 +311,7 @@ def hyperparameter_search(
     """
     device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")   # type: ignore
     param_grid = HYPERPARAM_GRID.get(model_name, HYPERPARAM_GRID["gcn"])
+    print("Starting hyperparameter search...")
 
     if search_type == "grid":
         # Generate all combinations
