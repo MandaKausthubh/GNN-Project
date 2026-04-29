@@ -64,7 +64,7 @@ def benchmark_layers(
         Dictionary with all results.
     """
     datasets = datasets or ["amazon", "dblp", "email"]
-    models = models or ["gcn", "residual_gcn", "gat", "residual_gat"]
+    models = models or ["gcn", "residual_gcn", "gat", "residual_gat", "appnp", "residual_appnp"]
     layer_counts = layer_counts or [2, 4, 8]
     device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -241,7 +241,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=str,
         nargs="+",
         default=["gcn", "residual_gcn", "gat", "residual_gat"],
-        choices=["gcn", "gat", "sage", "residual_gcn", "residual_gat", "residual_sage"],
+        choices=["gcn", "gat", "sage", "appnp", "residual_gcn", "residual_gat", "residual_sage", "residual_appnp"],
         help="Model types to compare",
     )
     parser.add_argument(

@@ -117,6 +117,7 @@ def plot_residual_comparison(
         "gcn": ("GCN", "GCN+Res"),
         "gat": ("GAT", "GAT+Res"),
         "sage": ("GraphSAGE", "GraphSAGE+Res"),
+        "appnp": ("APPNP", "APPNP+Res"),
     }
 
     datasets = sorted(all_results.keys())
@@ -184,7 +185,7 @@ def plot_residual_comparison(
     fig, ax = plt.subplots(figsize=(10, 6))
     x = np.arange(len(datasets))
     width = 0.25
-    colors_imp = ["#55A868", "#8172B3", "#CCB974"]
+    colors_imp = ["#55A868", "#8172B3", "#CCB974", "#E15759"]
 
     for i, base_key in enumerate(base_models):
         deltas = []
@@ -329,6 +330,8 @@ def plot_oversmoothing_comparison(
         "residual_gat": "GAT+Res",
         "sage": "GraphSAGE",
         "residual_sage": "GraphSAGE+Res",
+        "appnp": "APPNP",
+        "residual_appnp": "APPNP+Res",
     }
     model_colors = {
         "gcn": "#4C72B0",
@@ -337,6 +340,8 @@ def plot_oversmoothing_comparison(
         "residual_gat": "#55A868",
         "sage": "#CCB974",
         "residual_sage": "#CCB974",
+        "appnp": "#E15759",
+        "residual_appnp": "#E15759",
     }
     model_linestyle = {
         "gcn": "-",
@@ -345,6 +350,8 @@ def plot_oversmoothing_comparison(
         "residual_gat": "--",
         "sage": "-",
         "residual_sage": "--",
+        "appnp": "-",
+        "residual_appnp": "--",
     }
 
     # ── Figure 1: Line Plot — Accuracy vs Layers ─────────────────────────────

@@ -69,10 +69,11 @@ def benchmark_residual_vs_base(
         "gcn": ("residual_gcn", "GCN", "GCN+Res"),
         "gat": ("residual_gat", "GAT", "GAT+Res"),
         "sage": ("residual_sage", "GraphSAGE", "GraphSAGE+Res"),
+        "appnp": ("residual_appnp", "APPNP", "APPNP+Res"),
     }
 
     datasets = datasets or ["amazon", "dblp", "email"]
-    models = models or ["gcn", "gat", "sage"]
+    models = models or ["gcn", "gat", "sage", "appnp"]
     device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     default_hyperparams = {
@@ -237,8 +238,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--models",
         type=str,
         nargs="+",
-        default=["gcn", "gat", "sage"],
-        choices=["gcn", "gat", "sage"],
+        default=["gcn", "gat", "sage", "appnp"],
+        choices=["gcn", "gat", "sage", "appnp"],
         help="Base model types to compare",
     )
     parser.add_argument(
