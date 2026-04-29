@@ -312,6 +312,7 @@ def hyperparameter_search(
     device: Optional[str] = None,
     verbose: bool = False,
     args: Optional[argparse.Namespace] = None,
+    early_stopping_patience: int = 20,
 ) -> Tuple[Dict[str, Any], Dict[str, float], Dict[str, List[float]]]:
     """
     Perform hyperparameter search.
@@ -395,6 +396,7 @@ def hyperparameter_search(
         else:
             config = all_configs[i]
 
+        config["early_stopping_patience"] = early_stopping_patience
         config_str = f"hid={config.get('hidden_channels', '?')},layers={config.get('num_layers', '?')},lr={config.get('lr', '?')}"
         try:
             history, val_metrics, _ = train_single_model_dataset_config(
@@ -503,7 +505,8 @@ def run_baseline_evaluations_on_dataset(
             val_metric="accuracy",
             device=device,   # type: ignore
             verbose=True,
-            args=args
+            args=args,
+            early_stopping_patience=hyperparams.get("early_stopping_patience", 20),
         )
 
         print(f"Best hyperparameters for {model_name}:")
