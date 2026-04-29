@@ -294,7 +294,7 @@ def train_single_model_dataset_config(
     results = trainer.predict(data, "test_mask")
     test_metrics = {
         "accuracy": results["accuracy"],
-        "f1": results["f1"],
+        "f1": results["f1_score"],
     }
 
     return history, test_metrics, model
@@ -460,7 +460,7 @@ def hyperparameter_search(
     print(f"Best Config: {best_config}")
     if best_test_metrics:
         print(f"Test Accuracy: {best_test_metrics.get('accuracy', 0):.4f}")
-        print(f"Test F1 Score: {best_test_metrics.get('f1_score', 0):.4f}")
+        print(f"Test F1 Score: {best_test_metrics.get('f1', 0):.4f}")
     print("=" * 60)
 
     return best_config, best_test_metrics, {"trials": all_results}
