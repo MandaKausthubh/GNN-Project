@@ -215,7 +215,7 @@ def create_model(name, in_channels, out_channels, hyperparams):
 
         return GATWrapper(**common_kwargs, **gat_kwargs)
 
-    elif 'graphsage' == name:
+    elif 'sage' == name:
         return SAGEWrapper(**common_kwargs)
 
     elif 'appnp' == name:
