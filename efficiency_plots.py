@@ -247,6 +247,17 @@ def train_single_model_dataset_config(
     data = create_masks(data)
     assert hasattr(data, 'train_mask') and data.train_mask is not None, "train_mask must be created"
 
+    if verbose:
+        if hasattr(data, 'train_mask') and data.train_mask is not None:
+            num_train = data.train_mask.sum().item()    # type: ignore
+            num_val = data.val_mask.sum().item()    # type: ignore
+            num_test = data.test_mask.sum().item()    # type: ignore
+            print(f"  Train/Val/Test splits: {num_train}/{num_val}/{num_test} nodes")
+        else:
+            print("  No train/val/test masks found. Created default splits.")
+            if data is None:
+                print("  Warning: Data is None, cannot compute splits.")
+
     stats = get_dataset_stats(data)
     if verbose:
         print(f"Dataset '{dataset_name}' stats:")
@@ -411,7 +422,7 @@ def hyperparameter_search(
                     dataset_name=dataset_name,
                     hyperparams=config,
                     epochs=epochs,
-                    device=device,
+                    device=device,   # type: ignore
                     verbose=True,
                 )
                 # pbar.set_postfix_str(f"Cfg-{i+1}: {config_str} | {val_metric}={val_score:.4f} (BEST)")
