@@ -294,6 +294,164 @@ def plot_residual_comparison(
 
 
 # =============================================================================
+# Ablation: Residual — Twin Bar Chart (Acc + F1 side-by-side per dataset)
+# =============================================================================
+
+def plot_residual_twin_comparison(
+    all_results: Dict[str, Dict[str, Any]],
+    save_dir: Optional[str] = None,
+    show: bool = False,
+    dpi: int = 150,
+) -> None:
+    """
+    Generate twin grouped bar charts — one plot per dataset, showing
+    both Accuracy and F1 Score for each model (Base and +Residual)
+    side-by-side in a single cohesive figure.
+
+    Produces 3 figures (one per dataset):
+      - Left subplot: Accuracy
+      - Right subplot: F1 Score
+
+    Args:
+        all_results: Results dict from benchmark_residual_vs_base.
+        save_dir: Directory to save plots.
+        show: Whether to display plots.
+        dpi: DPI for saved figures.
+    """
+    model_pairs = {
+        "gcn": ("GCN", "GCN+Res"),
+        "gat": ("GAT", "GAT+Res"),
+        "sage": ("GraphSAGE", "GraphSAGE+Res"),
+        "appnp": ("APPNP", "APPNP+Res"),
+    }
+
+    datasets = sorted(all_results.keys())
+    base_models = [k for k in model_pairs.keys()]
+
+    for dataset_name in datasets:
+        comparison = all_results[dataset_name].get("comparison", {})
+
+        model_labels = []
+        acc_base, acc_res, acc_std_base, acc_std_res = [], [], [], []
+        f1_base, f1_res, f1_std_base, f1_std_res = [], [], [], []
+
+        for base_key in base_models:
+            if base_key not in comparison:
+                continue
+            res_key = "residual_" + base_key
+            if res_key not in comparison:
+                continue
+
+            model_labels.append(model_pairs[base_key][0])
+
+            acc_base.append(comparison[base_key]["accuracy_mean"])
+            acc_res.append(comparison[res_key]["accuracy_mean"])
+            acc_std_base.append(comparison[base_key]["accuracy_std"])
+            acc_std_res.append(comparison[res_key]["accuracy_std"])
+
+            f1_base.append(comparison[base_key]["f1_mean"])
+            f1_res.append(comparison[res_key]["f1_mean"])
+            f1_std_base.append(comparison[base_key]["f1_std"])
+            f1_std_res.append(comparison[res_key]["f1_std"])
+
+        n_models = len(model_labels)
+        x = np.arange(n_models)
+        width = 0.18
+
+        # Colors
+        c_base = "#4C72B0"
+        c_res = "#DD8452"
+        c_acc = "#2E86AB"
+        c_f1 = "#A23B72"
+
+        fig, (ax_acc, ax_f1) = plt.subplots(1, 2, figsize=(16, 6))
+
+        # ── Left: Accuracy ────────────────────────────────────────────────────
+        bars_acc_b = ax_acc.bar(x - 1.5 * width, acc_base, width,
+                                label="Base", color=c_base, alpha=0.85, edgecolor="black")
+        bars_acc_r = ax_acc.bar(x - 0.5 * width, acc_res, width,
+                                label="+Residual", color=c_res, alpha=0.85, edgecolor="black")
+
+        ax_acc.errorbar(x - 1.5 * width, acc_base, yerr=acc_std_base,
+                        fmt="none", color="black", capsize=3)
+        ax_acc.errorbar(x - 0.5 * width, acc_res, yerr=acc_std_res,
+                        fmt="none", color="black", capsize=3)
+
+        # Value labels
+        for bars in [bars_acc_b, bars_acc_r]:
+            for bar in bars:
+                ax_acc.annotate(
+                    f"{bar.get_height():.3f}",
+                    xy=(bar.get_x() + bar.get_width() / 2, bar.get_height()),
+                    xytext=(0, 2),
+                    textcoords="offset points",
+                    ha="center", va="bottom", fontsize=7.5,
+                )
+
+        ax_acc.set_ylabel("Accuracy", fontsize=13, color=c_acc)
+        ax_acc.set_title("Accuracy", fontsize=14, fontweight="bold", color=c_acc)
+        ax_acc.set_xticks(x)
+        ax_acc.set_xticklabels(model_labels, fontsize=11)
+        ax_acc.set_ylim(0, 1.08)
+        ax_acc.grid(axis="y", alpha=0.3)
+        ax_acc.legend(fontsize=10, loc="lower right")
+
+        # Color the tick labels to match bars
+        for i, label in enumerate(ax_acc.get_xticklabels()):
+            label.set_color(c_base if i % 2 == 0 else c_res)
+
+        # ── Right: F1 Score ──────────────────────────────────────────────────
+        bars_f1_b = ax_f1.bar(x + 0.5 * width, f1_base, width,
+                              label="Base", color=c_base, alpha=0.85, edgecolor="black")
+        bars_f1_r = ax_f1.bar(x + 1.5 * width, f1_res, width,
+                              label="+Residual", color=c_res, alpha=0.85, edgecolor="black")
+
+        ax_f1.errorbar(x + 0.5 * width, f1_base, yerr=f1_std_base,
+                       fmt="none", color="black", capsize=3)
+        ax_f1.errorbar(x + 1.5 * width, f1_res, yerr=f1_std_res,
+                       fmt="none", color="black", capsize=3)
+
+        for bars in [bars_f1_b, bars_f1_r]:
+            for bar in bars:
+                ax_f1.annotate(
+                    f"{bar.get_height():.3f}",
+                    xy=(bar.get_x() + bar.get_width() / 2, bar.get_height()),
+                    xytext=(0, 2),
+                    textcoords="offset points",
+                    ha="center", va="bottom", fontsize=7.5,
+                )
+
+        ax_f1.set_ylabel("F1 Score", fontsize=13, color=c_f1)
+        ax_f1.set_title("F1 Score", fontsize=14, fontweight="bold", color=c_f1)
+        ax_f1.set_xticks(x)
+        ax_f1.set_xticklabels(model_labels, fontsize=11)
+        ax_f1.set_ylim(0, 1.08)
+        ax_f1.grid(axis="y", alpha=0.3)
+        ax_f1.legend(fontsize=10, loc="lower right")
+
+        for i, label in enumerate(ax_f1.get_xticklabels()):
+            label.set_color(c_base if i % 2 == 0 else c_res)
+
+        # Per-dataset title
+        fig.suptitle(
+            f"Residual vs Non-Residual — {dataset_name.upper()}\nAccuracy & F1 Score Comparison",
+            fontsize=15,
+            fontweight="bold",
+            y=1.02,
+        )
+        plt.tight_layout()
+
+        if save_dir:
+            out_path = os.path.join(save_dir, f"ablation_residual_twin_{dataset_name}.png")
+            plt.savefig(out_path, dpi=dpi, bbox_inches="tight")
+            print(f"Saved: {out_path}")
+
+        if show:
+            plt.show()
+        plt.close()
+
+
+# =============================================================================
 # Ablation: Oversmoothing (Layer Depth)
 # =============================================================================
 

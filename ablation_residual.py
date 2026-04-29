@@ -29,7 +29,7 @@ from train import (
     train_single_config,
 )
 from utils import Trainer
-from utils.training_time_plots import plot_residual_comparison
+from utils.training_time_plots import plot_residual_comparison, plot_residual_twin_comparison
 
 
 # =============================================================================
@@ -218,8 +218,9 @@ def benchmark_residual_vs_base(
     # Generate plots
     if save_plots:
         print("\nGenerating comparison plots...")
-        from utils.training_time_plots import plot_residual_comparison
+        from utils.training_time_plots import plot_residual_comparison, plot_residual_twin_comparison
         plot_residual_comparison(all_results, save_dir=output_dir)
+        plot_residual_twin_comparison(all_results, save_dir=output_dir)
         print(f"Plots saved to: {output_dir}")
 
     return all_results

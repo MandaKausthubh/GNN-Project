@@ -185,8 +185,9 @@ class ResidualGNNWrapper(nn.Module):
         elif model_type.lower() == "gat":
             from torch_geometric.nn import GATConv
             heads = kwargs.pop("heads", 1)
-            concat = kwargs.pop("concat", True)
-            return GATConv(in_channels, out_channels, heads=heads, concat=concat, **kwargs)
+            # concat=False so output_dim = hidden_channels (not heads*hidden_channels).
+            # This matches dimensions for residual connections.
+            return GATConv(in_channels, out_channels, heads=heads, concat=False, **kwargs)
         elif model_type.lower() == "sage":
             from torch_geometric.nn import SAGEConv
             return SAGEConv(in_channels, out_channels, **kwargs)
@@ -267,8 +268,8 @@ class ResidualGNNWrapper(nn.Module):
             if self.training:
                 h = F.dropout(h, p=self.dropout, training=True)
 
-            # Residual connection with alpha blending (only when dimensions match, i.e., not last layer)
-            if self.use_residual and i < self.num_layers - 1:
+            # Residual connection with alpha blending (only when dimensions match)
+            if self.use_residual and i < self.num_layers - 1 and identity.shape == h.shape:
                 h = self.residual_alpha * h + (1 - self.residual_alpha) * identity
 
             # Activation (skip last layer)
