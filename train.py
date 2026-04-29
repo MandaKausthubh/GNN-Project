@@ -32,8 +32,7 @@ from models import GCNWrapper, GATWrapper, SAGEWrapper, PPNPWrapper, APPNPWrappe
 from utils import Trainer, ResidualGNNWrapper, ResidualAPPNPWrapper
 from utils import (
     plot_tsne_from_model,
-    plot_training_time_per_epoch,
-    plot_training_time_summary,
+    plot_avg_epoch_time_comparison,
 )
 from utils.bayes_hp import (
     get_bayesian_optimizer_for_model,
@@ -950,15 +949,6 @@ def benchmark_all_datasets(
                         plot_tsne_from_model(model, data, device, save_path=tsne_path,
                                              title=f"t-SNE: {model_name.upper()} on {dataset_name}")
 
-                    if save_time_plots:
-                        time_path = os.path.join(output_dir, f"{base_name}_time.png")
-                        plot_training_time_summary(
-                            history.get("epoch_times", []),
-                            model_name=model_name,
-                            dataset_name=dataset_name,
-                            save_path=time_path
-                        )
-
             # Store results for this model
             if model_results["accuracy"]:
                 if dataset_name not in all_results:
@@ -1012,6 +1002,11 @@ def benchmark_all_datasets(
     results_path = os.path.join(output_dir, f"all_datasets_benchmark_{timestamp}.json")
     with open(results_path, 'w') as f:
         json.dump(all_results, f, indent=2)
+
+    # Generate avg epoch time comparison plot
+    if save_time_plots:
+        time_comparison_path = os.path.join(output_dir, f"avg_epoch_time_comparison_{timestamp}.png")
+        plot_avg_epoch_time_comparison(all_results, save_path=time_comparison_path)
 
     if verbose:
         print(f"\nAll results saved to: {results_path}")
