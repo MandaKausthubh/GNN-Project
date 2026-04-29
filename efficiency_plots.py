@@ -87,13 +87,18 @@ HYPERPARAM_RANDOM_DIST = {
 }
 
 # ================= Useful stuff =================
-def pretty_print_dicts(dict, padding:int = 0):
-    for key, value in dict.items():
-        if isinstance(value, dict):
-            print(" " * padding + f"{key}:")
+def pretty_print_dicts(data, padding: int = 0):
+    indent = " " * padding
+    if isinstance(data, dict):
+        for key, value in data.items():
+            print(f"{indent}{key}:")
             pretty_print_dicts(value, padding + 4)
-        else:
-            print(" " * padding + f"{key}: {value}")
+    elif isinstance(data, list):
+        for i, item in enumerate(data):
+            print(f"{indent}[{i}]:")
+            pretty_print_dicts(item, padding + 4)
+    else:
+        print(f"{indent}{data}")
 
 
 
