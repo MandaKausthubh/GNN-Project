@@ -963,13 +963,22 @@ def benchmark_all_datasets(
             if model_results["accuracy"]:
                 if dataset_name not in all_results:
                     all_results[dataset_name] = {"stats": stats, "benchmark": {}}
+
+                # Strip model objects from individual_runs before JSON serialization
+                serializable_runs = {
+                    "accuracy": model_results["accuracy"],
+                    "f1_score": model_results["f1_score"],
+                    "configs": model_results["configs"],
+                    "histories": model_results["histories"],
+                }
+
                 all_results[dataset_name]["benchmark"][model_name] = {
                     "accuracy_mean": float(np.mean(model_results["accuracy"])),
                     "accuracy_std": float(np.std(model_results["accuracy"])),
                     "f1_mean": float(np.mean(model_results["f1_score"])),
                     "f1_std": float(np.std(model_results["f1_score"])),
                     "runs": n_runs,
-                    "individual_runs": model_results,
+                    "individual_runs": serializable_runs,
                     "best_config": hyperparams_for_benchmark if tune_hyperparams else None,
                 }
                 # model_pbar.set_postfix_str(f"{model_name}: Acc={all_results[dataset_name]['benchmark'][model_name]['accuracy_mean']:.4f}")

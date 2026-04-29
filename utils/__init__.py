@@ -20,6 +20,7 @@ from .training_time_plots import (
     plot_training_time_per_epoch,
     plot_training_time_comparison,
     plot_training_time_summary,
+    plot_avg_epoch_time_comparison,
 )
 
 __all__ = [
@@ -49,4 +50,5 @@ __all__ = [
     "plot_training_time_per_epoch",
     "plot_training_time_comparison",
     "plot_training_time_summary",
+    "plot_avg_epoch_time_comparison",
 ]
