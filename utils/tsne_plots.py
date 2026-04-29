@@ -16,7 +16,7 @@ from torch_geometric.seed import seed_everything
 from sklearn.manifold import TSNE
 
 
-def get_node_embeddings(model: torch.nn.Module, data: torch_geometric.data.Data,
+def get_node_embeddings(model: torch.nn.Module, data: Data,
                          device: torch.device) -> Tuple[np.ndarray, np.ndarray]:
     """
     Extract node embeddings from a trained GNN model.
@@ -116,7 +116,7 @@ def plot_tsne(embeddings: np.ndarray, labels: np.ndarray,
     return None
 
 
-def plot_tsne_from_model(model: torch.nn.Module, data: torch_geometric.data.Data,
+def plot_tsne_from_model(model: torch.nn.Module, data: Data,
                           device: torch.device, save_path: Optional[str] = None,
                           show: bool = False, perplexity: float = 30.0,
                           n_iter: int = 1000, dpi: int = 150,
@@ -140,7 +140,7 @@ def plot_tsne_from_model(model: torch.nn.Module, data: torch_geometric.data.Data
               perplexity=perplexity, n_iter=n_iter, dpi=dpi, title=title)
 
 
-def plot_tsne_comparison(model_results: dict, data: torch_geometric.data.Data,
+def plot_tsne_comparison(model_results: dict, data: Data,
                           device: torch.device, save_path: Optional[str] = None,
                           show: bool = False, perplexity: float = 30.0,
                           dpi: int = 150, figsize: Tuple[int, int] = (18, 6)):
