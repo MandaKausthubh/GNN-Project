@@ -368,6 +368,7 @@ def hyperparameter_search(
     best_val_score = -float("inf") if val_metric == "accuracy" else float("inf")
     best_config = None
     best_test_metrics = None
+    best_trial_history = None
     all_results = []
 
     # Bayesian optimizer (only used if search_type == "bayesian")
@@ -425,6 +426,7 @@ def hyperparameter_search(
             if is_better:
                 best_val_score = val_score
                 best_config = config
+                best_trial_history = history
                 # Retrain with best config to get test metrics
                 best_history, best_test_metrics, _ = train_single_model_dataset_config(
                     model_name=model_name,
@@ -463,7 +465,7 @@ def hyperparameter_search(
         print(f"Test F1 Score: {best_test_metrics.get('f1', 0):.4f}")
     print("=" * 60)
 
-    return best_config, best_test_metrics, {"trials": all_results}
+    return best_config, best_test_metrics, {"trials": all_results, "best_trial_history": best_trial_history}
 
 
 
@@ -520,33 +522,31 @@ def run_baseline_evaluations_on_dataset(
 
     fig, axes = plt.subplots(3, 2, figsize=(15, 12))
     for model_name, result in results.items():
-        tuning_results = result["tuning_results"]["trials"]
-        for trial in tuning_results:
-            history = trial.get("history")
-            if history is None:
-                continue
+        history = result["tuning_results"].get("best_trial_history")
+        if history is None:
+            continue
 
-            train_acc = history.get("train_acc", [])
-            val_acc = history.get("val_acc", [])
-            train_f1 = history.get("train_f1", [])
-            val_f1 = history.get("val_f1", [])
-            train_loss = history.get("train_loss", [])
-            val_loss = history.get("val_loss", [])
+        train_acc = history.get("train_acc", [])
+        val_acc = history.get("val_acc", [])
+        train_f1 = history.get("train_f1", [])
+        val_f1 = history.get("val_f1", [])
+        train_loss = history.get("train_loss", [])
+        val_loss = history.get("val_loss", [])
 
-            if len(train_acc) == 0:
-                continue
+        if len(train_acc) == 0:
+            continue
 
-            steps = list(range(1, len(train_acc) + 1))
+        steps = list(range(1, len(train_acc) + 1))
 
-            # Training plots
-            axes[0, 0].plot(steps, train_acc, label=f"{model_name} Trial {trial['trial']}")
-            axes[1, 0].plot(steps, train_f1, label=f"{model_name} Trial {trial['trial']}")
-            axes[2, 0].plot(steps, train_loss, label=f"{model_name} Trial {trial['trial']}")
+        # Training plots
+        axes[0, 0].plot(steps, train_acc, label=model_name)
+        axes[1, 0].plot(steps, train_f1, label=model_name)
+        axes[2, 0].plot(steps, train_loss, label=model_name)
 
-            # Validation plots
-            axes[0, 1].plot(steps, val_acc, label=f"{model_name} Trial {trial['trial']}")
-            axes[1, 1].plot(steps, val_f1, label=f"{model_name} Trial {trial['trial']}")
-            axes[2, 1].plot(steps, val_loss, label=f"{model_name} Trial {trial['trial']}")
+        # Validation plots
+        axes[0, 1].plot(steps, val_acc, label=model_name)
+        axes[1, 1].plot(steps, val_f1, label=model_name)
+        axes[2, 1].plot(steps, val_loss, label=model_name)
 
     axes[0, 1].set_title("Validation Accuracy")
     axes[1, 1].set_title("Validation F1 Score")
