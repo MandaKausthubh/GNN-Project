@@ -836,6 +836,7 @@ def benchmark_all_datasets(
     datasets = ["amazon", "dblp", "email"]
     models = models or ["gcn", "gat", "sage", "ppnp", "appnp"]
     all_results = {}
+    avg_times = {}
 
     # Outer progress bar for datasets
     # dataset_pbar = tqdm(total=len(datasets), desc="[Benchmark All]", bar_format="{desc} |{bar}| {postfix}", ncols=100, position=0)
@@ -911,7 +912,7 @@ def benchmark_all_datasets(
                     model_results["configs"].append(hyperparams_for_run)
 
                     # Save history and model if requested
-                    if save_history or save_curves:
+                    if save_history or save_curves or save_time_plots:
                         model_results["histories"].append(history)
                         model_results["models"].append(model)
 
@@ -971,6 +972,19 @@ def benchmark_all_datasets(
                     "individual_runs": serializable_runs,
                     "best_config": hyperparams_for_benchmark if tune_hyperparams else None,
                 }
+
+                # Accumulate avg epoch times for time comparison plot
+                histories = model_results.get("histories", [])
+                if histories:
+                    all_epoch_times = []
+                    for h in histories:
+                        if isinstance(h, dict) and "epoch_times" in h:
+                            all_epoch_times.extend(h["epoch_times"])
+                    if all_epoch_times:
+                        avg_time = sum(all_epoch_times) / len(all_epoch_times)
+                        if dataset_name not in avg_times:
+                            avg_times[dataset_name] = {}
+                        avg_times[dataset_name][model_name] = avg_time
                 # model_pbar.set_postfix_str(f"{model_name}: Acc={all_results[dataset_name]['benchmark'][model_name]['accuracy_mean']:.4f}")
                 # model_pbar.update(1)
 
@@ -1003,10 +1017,9 @@ def benchmark_all_datasets(
     with open(results_path, 'w') as f:
         json.dump(all_results, f, indent=2)
 
-    # Generate avg epoch time comparison plot
+    # Generate avg epoch time comparison plots
     if save_time_plots:
-        time_comparison_path = os.path.join(output_dir, f"avg_epoch_time_comparison_{timestamp}.png")
-        plot_avg_epoch_time_comparison(all_results, save_path=time_comparison_path)
+        plot_avg_epoch_time_comparison(avg_times, save_dir=output_dir)
 
     if verbose:
         print(f"\nAll results saved to: {results_path}")
