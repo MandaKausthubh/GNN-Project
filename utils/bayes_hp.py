@@ -149,24 +149,48 @@ class BayesianOptimization:
                 low, high = self.param_bounds[name]
                 x[i] = random.uniform(low, high)
             elif name in self.discrete_params:
-                # Discrete parameter - sample from list
+                # Discrete parameter - sample index from list
                 values = self.discrete_params[name]
-                x[i] = random.choice(values)
+                x[i] = float(random.randint(0, len(values) - 1))
 
         return x
 
+    def _params_to_indices(self, params: Dict[str, Any]) -> np.ndarray:
+        """Convert actual parameter values to indices for internal storage."""
+        x = np.zeros(len(self.param_names))
+        for i, name in enumerate(self.param_names):
+            if name in self.param_bounds:
+                x[i] = params[name]
+            elif name in self.discrete_params:
+                values = self.discrete_params[name]
+                x[i] = float(values.index(params[name]))
+        return x
+
+    def _indices_to_params(self, x: np.ndarray) -> Dict[str, Any]:
+        """Convert internal index representation to actual parameter values."""
+        result = {}
+        for i, name in enumerate(self.param_names):
+            if name in self.discrete_params:
+                values = self.discrete_params[name]
+                idx = int(round(x[i]))
+                idx = max(0, min(idx, len(values) - 1))
+                result[name] = values[idx]
+            else:
+                result[name] = x[i]
+        return result
+
     def _discretize(self, x: np.ndarray) -> np.ndarray:
-        """Round discrete parameters to nearest valid value."""
+        """Round discrete parameters to nearest valid index."""
         x_discrete = x.copy()
 
         idx = 0
         for name in self.param_names:
             if name in self.discrete_params:
                 values = self.discrete_params[name]
-                # Find nearest value
-                current_val = x_discrete[idx]
-                nearest = min(values, key=lambda v: abs(v - current_val))
-                x_discrete[idx] = nearest
+                # Clamp index to valid range
+                idx_int = int(round(x_discrete[idx]))
+                idx_int = max(0, min(idx_int, len(values) - 1))
+                x_discrete[idx] = float(idx_int)
             idx += 1
 
         return x_discrete
@@ -252,12 +276,8 @@ class BayesianOptimization:
             # Use GP to suggest next point
             x = self._optimize_acquisition()
 
-        # Convert to dict
-        result = {}
-        for i, name in enumerate(self.param_names):
-            result[name] = x[i]
-
-        return result
+        # Convert indices to actual parameter values
+        return self._indices_to_params(x)
 
     def observe(
         self,
@@ -271,10 +291,8 @@ class BayesianOptimization:
             params: The hyperparameter configuration that was evaluated.
             target: The target value (e.g., validation accuracy) achieved.
         """
-        # Convert params to array
-        x = np.zeros(len(self.param_names))
-        for i, name in enumerate(self.param_names):
-            x[i] = params[name]
+        # Convert params to indices for internal storage
+        x = self._params_to_indices(params)
 
         self.X_evaluated.append(x)
         self.y_evaluated.append(target)
@@ -295,19 +313,14 @@ class BayesianOptimization:
         if self.best_x is None:
             return {}, self.best_y
 
-        result = {}
-        for i, name in enumerate(self.param_names):
-            result[name] = self.best_x[i]
-
-        return result, self.best_y
+        return self._indices_to_params(self.best_x), self.best_y
 
     def get_history(self) -> List[Dict[str, Any]]:
         """Return history of all evaluated configurations."""
         history = []
         for i, (x, y) in enumerate(zip(self.X_evaluated, self.y_evaluated)):
             entry = {"iteration": i + 1, "target": y}
-            for j, name in enumerate(self.param_names):
-                entry[name] = x[j]
+            entry.update(self._indices_to_params(x))
             history.append(entry)
         return history
 
