@@ -614,3 +614,8 @@ def main():
     print(f"Using device: {device} for experiments")
 
     run_efficiency_plots(args)
+
+
+
+if __name__ == "__main__": 
+    main()
