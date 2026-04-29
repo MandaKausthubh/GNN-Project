@@ -597,6 +597,7 @@ def run_efficiency_plots(args):
                 "K": args.K,
                 "alpha": args.alpha,
                 "n_hyperparam_trials": args.n_hyperparam_trials,
+                "early_stopping_patience": args.early_stopping_patience,
             },
             epochs=args.epochs,
             device=torch.device(args.device if args.device else ("cuda" if torch.cuda.is_available() else "cpu")),
