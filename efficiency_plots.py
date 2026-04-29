@@ -526,6 +526,7 @@ def run_baseline_evaluations_on_dataset(
 
 def run_efficiency_plots(args):
     """Run efficiency plots for different models on a dataset."""
+    print(f"Running efficiency plots for models: {args.models} on datasets: {args.datasets}")
     for dataset_name in args.datasets:
         results = run_baseline_evaluations_on_dataset(
             model_names=args.models,
