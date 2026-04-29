@@ -5,7 +5,7 @@ Generates plots showing training time per epoch and cumulative training time.
 """
 
 import os
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
