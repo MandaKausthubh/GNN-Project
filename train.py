@@ -28,7 +28,7 @@ from torch_geometric.seed import seed_everything
 from tqdm import tqdm
 
 from gnn_datasets import AmazonPhotos, EmailEuCore, DBLP
-from models import GCNWrapper, GATWrapper, SAGEWrapper, PPNPWrapper, APPNPWrapper
+from models import GCNWrapper, GATWrapper, SAGEWrapper, PPNPWrapper, APPNPWrapper, MLPWrapper
 from utils import Trainer, ResidualGNNWrapper, ResidualAPPNPWrapper
 from utils import (
     plot_tsne_from_model,
@@ -87,6 +87,14 @@ HYPERPARAM_GRID = {
         "lr": [0.01, 0.005, 0.001],
         "weight_decay": [5e-4, 1e-4, 5e-5],
         "K": [5, 10, 20],
+            "mlp": {
+                "hidden_channels": [64, 128, 256],
+                "num_layers": [2, 3, 4],
+                "dropout": [0.3, 0.5, 0.7],
+                "norm": ["layer", "batch", "none"],
+                "lr": [0.01, 0.005, 0.001],
+                "weight_decay": [5e-4, 1e-4, 5e-5],
+            },
         "alpha": [0.1, 0.15, 0.2],
     },
 }
@@ -252,6 +260,11 @@ def create_model(
             K=hyperparams.get("K", 10),
             alpha=hyperparams.get("alpha", 0.1),
         )
+    elif model_name == "mlp":
+        mlp_kwargs = {
+            "act": hyperparams.get("act", "relu"),
+        }
+        return MLPWrapper(**common_kwargs, **mlp_kwargs)
     else:
         raise ValueError(f"Unknown model: {model_name}")
 
@@ -369,8 +382,14 @@ def hyperparameter_search(
         # Random search
         all_configs = []
         for _ in range(n_trials):
-            config = {k: v() for k, v in HYPERPARAM_RANDOM_DIST.items() if k in param_grid or k in HYPERPARAM_RANDOM_DIST}
-            # Add model-specific params
+            config = {}
+            for k in param_grid.keys():
+                if k in HYPERPARAM_RANDOM_DIST:
+                    config[k] = HYPERPARAM_RANDOM_DIST[k]()
+                else:
+                    config[k] = random.choice(param_grid[k])
+
+            # Add model-specific params if needed
             if model_name == "ppnp" and "alpha" not in config:
                 config["alpha"] = random.uniform(0.05, 0.3)
             if model_name == "appnp":
@@ -1027,6 +1046,143 @@ def benchmark_all_datasets(
     return all_results
 
 
+def tune_then_benchmark_models(
+    dataset_name: str,
+    data: Data,
+    models: Optional[List[str]] = None,
+    search_type: str = "random",
+    n_trials: int = 10,
+    epochs: int = 100,
+    n_runs: int = 3,
+    tune_seed: int = 42,
+    eval_seeds: Optional[List[int]] = None,
+    device: Optional[str] = None,
+    output_dir: str = "./outputs",
+    verbose: bool = False,
+) -> Dict[str, Any]:
+    """
+    Tune hyperparameters on a single seed, then evaluate on other seeds.
+
+    Args:
+        dataset_name: Name of the dataset.
+        data: PyG Data object.
+        models: List of model names to benchmark.
+        search_type: "grid" or "random".
+        n_trials: Number of trials for hyperparameter search.
+        epochs: Training epochs per run.
+        n_runs: Total number of seeds (1 tuning seed + n_runs-1 eval seeds).
+        tune_seed: Seed used for hyperparameter tuning.
+        device: Device to train on.
+        output_dir: Directory to save results.
+        verbose: Print progress.
+
+    Returns:
+        Dictionary with tuning trials and evaluation results.
+    """
+    device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    models = models or ["gcn", "gat", "sage", "ppnp", "appnp"]
+
+    if n_runs < 2:
+        raise ValueError("n_runs must be at least 2 (1 tuning seed + >=1 eval seed).")
+
+    results: Dict[str, Any] = {}
+    if eval_seeds is None:
+        eval_seeds = [tune_seed + i for i in range(1, n_runs)]
+    else:
+        eval_seeds = [s for s in eval_seeds if s != tune_seed]
+        if not eval_seeds:
+            raise ValueError("eval_seeds must include at least one seed different from tune_seed.")
+
+    for model_name in models:
+        if verbose:
+            print(f"\n{'='*60}")
+            print(f"Tuning {model_name.upper()} on {dataset_name} (seed={tune_seed})")
+            print(f"{'='*60}")
+
+        seed_everything(tune_seed)
+        data_tune = create_masks(data, seed=tune_seed) if not hasattr(data, 'train_mask') else data
+
+        best_config, best_metrics, trial_results = hyperparameter_search(
+            model_name=model_name,
+            dataset_name=dataset_name,
+            data=data_tune,
+            search_type=search_type,
+            n_trials=n_trials,
+            epochs=epochs,
+            val_metric="accuracy",
+            device=device,
+            verbose=verbose,
+        )
+
+        print(f"\n[TRIALS - {model_name.upper()} on {dataset_name}]")
+        trials = trial_results.get("trials", [])
+        for t in trials:
+            print(f"  Trial {t['trial']:02d} | Val Acc: {t['val_score']:.4f} | Config: {t['config']}")
+
+        print(f"\n[BEST CONFIG - {model_name.upper()} on {dataset_name}]")
+        print(f"  {best_config} | Val Acc: {best_metrics.get('accuracy', 0.0):.4f}")
+
+        # Evaluate with the best config on the remaining seeds
+        eval_metrics = {"accuracy": [], "f1_score": []}
+        for seed in eval_seeds:
+            seed_everything(seed)
+            data_run = create_masks(data, seed=seed) if not hasattr(data, 'train_mask') else data
+            _, test_metrics, _ = train_single_config(
+                model_name=model_name,
+                dataset_name=dataset_name,
+                data=data_run,
+                hyperparams=best_config,
+                epochs=epochs,
+                device=device,
+                verbose=False,
+            )
+            eval_metrics["accuracy"].append(test_metrics["accuracy"])
+            eval_metrics["f1_score"].append(test_metrics["f1_score"])
+
+        results[model_name] = {
+            "best_config": best_config,
+            "tuning_seed": tune_seed,
+            "eval_seeds": eval_seeds,
+            "trials": trials,
+            "eval_accuracy": eval_metrics["accuracy"],
+            "eval_f1_score": eval_metrics["f1_score"],
+            "accuracy_mean": float(np.mean(eval_metrics["accuracy"])),
+            "accuracy_std": float(np.std(eval_metrics["accuracy"])),
+            "f1_mean": float(np.mean(eval_metrics["f1_score"])),
+            "f1_std": float(np.std(eval_metrics["f1_score"])),
+        }
+
+    # Print a neat summary table
+    print("\n" + "=" * 80)
+    print(f"[SUMMARY - {dataset_name.upper()} | Eval Seeds: {eval_seeds}]")
+    print("=" * 80)
+    header = f"{'Model':<18} {'Acc Mean':>10} {'Acc Std':>10} {'F1 Mean':>10} {'F1 Std':>10} {'Best Config'}"
+    print(header)
+    print("-" * len(header))
+    for model_name, r in results.items():
+        print(
+            f"{model_name:<18} "
+            f"{r['accuracy_mean']:>10.4f} "
+            f"{r['accuracy_std']:>10.4f} "
+            f"{r['f1_mean']:>10.4f} "
+            f"{r['f1_std']:>10.4f} "
+            f"{r['best_config']}"
+        )
+    print("=" * 80)
+
+    # Save results
+    os.makedirs(output_dir, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    results_path = os.path.join(output_dir, f"tune_then_benchmark_{dataset_name}_{timestamp}.json")
+    with open(results_path, "w") as f:
+        json.dump(results, f, indent=2)
+
+    if verbose:
+        print(f"\nResults saved to: {results_path}")
+
+    return results
+
+
 # =============================================================================
 # Main Entry Point
 # =============================================================================
@@ -1038,7 +1194,7 @@ def main():
     parser.add_argument(
         "--mode",
         type=str,
-        choices=["train", "tune", "benchmark", "benchmark_all", "benchmark_email_features"],
+        choices=["train", "tune", "benchmark", "benchmark_all", "benchmark_email_features", "tune_then_benchmark"],
         default="train",
         help="Operation mode",
     )
@@ -1068,7 +1224,7 @@ def main():
     parser.add_argument(
         "--model",
         type=str,
-        choices=["gcn", "gat", "sage", "ppnp", "appnp", "residual_gcn", "residual_gat", "residual_sage", "residual_appnp"],
+        choices=["gcn", "gat", "sage", "ppnp", "appnp", "mlp", "residual_gcn", "residual_gat", "residual_sage", "residual_appnp"],
         default="gcn",
         help="Model architecture",
     )
@@ -1094,6 +1250,14 @@ def main():
     # Training options
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--n-runs", type=int, default=3, help="Number of runs for benchmarking")
+    parser.add_argument("--tune-seed", type=int, default=42, help="Seed used for hyperparameter tuning")
+    parser.add_argument(
+        "--eval-seeds",
+        type=int,
+        nargs="+",
+        default=None,
+        help="Explicit evaluation seeds (overrides n-runs/tune-seed offsets)",
+    )
     parser.add_argument("--device", type=str, default=None, help="Device (cuda/cpu)")
 
     # Hyperparameter search
@@ -1358,6 +1522,32 @@ def main():
             save_time_plots=args.save_training_time_plots,
         )
         # Final results already printed in benchmark_all_datasets
+
+    elif args.mode == "tune_then_benchmark":
+        # Tune on one seed, then evaluate with best config on other seeds
+        print(
+            f"\nTune-then-benchmark on {args.dataset} "
+            f"(tune_seed={args.tune_seed}, n_trials={args.n_trials}, n_runs={args.n_runs})"
+        )
+        models = args.models or ["gcn", "gat", "sage", "ppnp", "appnp"]
+
+        _, data = load_dataset(args.dataset, args.data_dir, email_features)
+        data = create_masks(data) if not hasattr(data, 'train_mask') else data
+
+        results = tune_then_benchmark_models(
+            dataset_name=args.dataset,
+            data=data,
+            models=models,
+            search_type=args.search_type,
+            n_trials=args.n_trials,
+            epochs=args.epochs,
+            n_runs=args.n_runs,
+            tune_seed=args.tune_seed,
+            eval_seeds=args.eval_seeds,
+            device=device,
+            output_dir=args.output_dir,
+            verbose=args.verbose,
+        )
 
 
 if __name__ == "__main__":

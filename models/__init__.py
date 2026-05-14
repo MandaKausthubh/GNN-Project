@@ -2,6 +2,7 @@ from .gcn import GCNWrapper
 from .gat import GATWrapper
 from .sage import SAGEWrapper
 from .ppnp import PPNPWrapper, APPNPWrapper
+from .mlp import MLPWrapper
 
 __all__ = [
     "GCNWrapper",
@@ -9,4 +10,5 @@ __all__ = [
     "SAGEWrapper",
     "PPNPWrapper",
     "APPNPWrapper",
+    "MLPWrapper",
 ]
