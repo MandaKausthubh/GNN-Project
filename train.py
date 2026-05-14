@@ -87,15 +87,15 @@ HYPERPARAM_GRID = {
         "lr": [0.01, 0.005, 0.001],
         "weight_decay": [5e-4, 1e-4, 5e-5],
         "K": [5, 10, 20],
-            "mlp": {
-                "hidden_channels": [64, 128, 256],
-                "num_layers": [2, 3, 4],
-                "dropout": [0.3, 0.5, 0.7],
-                "norm": ["layer", "batch", "none"],
-                "lr": [0.01, 0.005, 0.001],
-                "weight_decay": [5e-4, 1e-4, 5e-5],
-            },
         "alpha": [0.1, 0.15, 0.2],
+    },
+    "mlp": {
+        "hidden_channels": [64, 128, 256],
+        "num_layers": [2, 3, 4],
+        "dropout": [0.3, 0.5, 0.7],
+        "norm": ["layer", "batch", "none"],
+        "lr": [0.01, 0.005, 0.001],
+        "weight_decay": [5e-4, 1e-4, 5e-5],
     },
 }
 
