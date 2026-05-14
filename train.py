@@ -1123,11 +1123,11 @@ def tune_then_benchmark_models(
         print(f"  {best_config} | Val Acc: {best_metrics.get('accuracy', 0.0):.4f}")
 
         # Evaluate with the best config on the remaining seeds
-        eval_metrics = {"accuracy": [], "f1_score": []}
+        eval_metrics = {"accuracy": [], "f1_score": [], "epoch_times": []}
         for seed in eval_seeds:
             seed_everything(seed)
             data_run = create_masks(data, seed=seed) if not hasattr(data, 'train_mask') else data
-            _, test_metrics, _ = train_single_config(
+            history, test_metrics, _ = train_single_config(
                 model_name=model_name,
                 dataset_name=dataset_name,
                 data=data_run,
@@ -1138,6 +1138,8 @@ def tune_then_benchmark_models(
             )
             eval_metrics["accuracy"].append(test_metrics["accuracy"])
             eval_metrics["f1_score"].append(test_metrics["f1_score"])
+            if isinstance(history, dict) and "epoch_times" in history:
+                eval_metrics["epoch_times"].extend(history["epoch_times"])
 
         results[model_name] = {
             "best_config": best_config,
@@ -1150,13 +1152,18 @@ def tune_then_benchmark_models(
             "accuracy_std": float(np.std(eval_metrics["accuracy"])),
             "f1_mean": float(np.mean(eval_metrics["f1_score"])),
             "f1_std": float(np.std(eval_metrics["f1_score"])),
+            "epoch_time_mean": float(np.mean(eval_metrics["epoch_times"])) if eval_metrics["epoch_times"] else 0.0,
+            "epoch_time_std": float(np.std(eval_metrics["epoch_times"])) if eval_metrics["epoch_times"] else 0.0,
         }
 
     # Print a neat summary table
     print("\n" + "=" * 80)
     print(f"[SUMMARY - {dataset_name.upper()} | Eval Seeds: {eval_seeds}]")
     print("=" * 80)
-    header = f"{'Model':<18} {'Acc Mean':>10} {'Acc Std':>10} {'F1 Mean':>10} {'F1 Std':>10} {'Best Config'}"
+    header = (
+        f"{'Model':<18} {'Acc Mean':>10} {'Acc Std':>10} "
+        f"{'F1 Mean':>10} {'F1 Std':>10} {'Time Mean':>10} {'Time Std':>10} {'Best Config'}"
+    )
     print(header)
     print("-" * len(header))
     for model_name, r in results.items():
@@ -1166,6 +1173,8 @@ def tune_then_benchmark_models(
             f"{r['accuracy_std']:>10.4f} "
             f"{r['f1_mean']:>10.4f} "
             f"{r['f1_std']:>10.4f} "
+            f"{r['epoch_time_mean']:>10.4f} "
+            f"{r['epoch_time_std']:>10.4f} "
             f"{r['best_config']}"
         )
     print("=" * 80)
