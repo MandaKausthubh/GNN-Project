@@ -37,6 +37,7 @@ def benchmark_layers(
     data_dir: str = "./data",
     models: Optional[List[str]] = None,
     datasets: Optional[List[str]] = None,
+    dblp_metapath: str = "apa",
     layer_counts: Optional[List[int]] = None,
     epochs: int = 100,
     epochs_schedule: Optional[Dict[int, int]] = None,
@@ -94,7 +95,7 @@ def benchmark_layers(
         print(f"Dataset: {dataset_name.upper()}")
         print(f"{'=' * 60}")
 
-        _, data = load_dataset(dataset_name, data_dir)
+        _, data = load_dataset(dataset_name, data_dir, dblp_metapath=dblp_metapath)
         data = create_masks(data) if not hasattr(data, "train_mask") else data
         stats = get_dataset_stats(data)
         if verbose:
@@ -258,6 +259,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Datasets to run on",
     )
     parser.add_argument(
+        "--dblp-metapath",
+        type=str,
+        choices=["apa", "aca", "apa_aca"],
+        default="apa",
+        help="DBLP homograph projection",
+    )
+    parser.add_argument(
         "--layers",
         type=int,
         nargs="+",
@@ -307,6 +315,7 @@ def main():
         data_dir=args.data_dir,
         models=args.models,
         datasets=args.datasets,
+        dblp_metapath=args.dblp_metapath,
         layer_counts=args.layers,
         epochs=args.epochs,
         epochs_schedule=epochs_schedule,

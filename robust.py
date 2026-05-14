@@ -119,6 +119,7 @@ def benchmark_robustness(
     data_dir: str = "./data",
     models: Optional[List[str]] = None,
     datasets: Optional[List[str]] = None,
+    dblp_metapath: str = "apa",
     removal_fractions: Optional[List[float]] = None,
     epochs: int = 100,
     search_type: str = "bayesian",
@@ -167,7 +168,7 @@ def benchmark_robustness(
         print(f"Dataset: {dataset_name.upper()}")
         print(f"{'=' * 60}")
 
-        _, data = load_dataset(dataset_name, data_dir)
+        _, data = load_dataset(dataset_name, data_dir, dblp_metapath=dblp_metapath)
         data = create_masks(data) if not hasattr(data, "train_mask") else data
         stats = get_dataset_stats(data)
         if verbose:
@@ -291,6 +292,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Datasets to run on",
     )
     parser.add_argument(
+        "--dblp-metapath",
+        type=str,
+        choices=["apa", "aca", "apa_aca"],
+        default="apa",
+        help="DBLP homograph projection",
+    )
+    parser.add_argument(
         "--removals",
         type=float,
         nargs="+",
@@ -324,6 +332,7 @@ def main():
         data_dir=args.data_dir,
         models=args.models,
         datasets=args.datasets,
+        dblp_metapath=args.dblp_metapath,
         removal_fractions=args.removals,
         epochs=args.epochs,
         search_type=args.search_type,

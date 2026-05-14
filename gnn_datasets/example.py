@@ -76,7 +76,14 @@ def main():
     parser.add_argument(
         "--apa",
         action="store_true",
-        help="Compute APA meta-path homograph for DBLP (Author-Paper-Author projection)",
+        help="Compute APA meta-path homograph for DBLP (kept for compatibility)",
+    )
+    parser.add_argument(
+        "--dblp-metapath",
+        type=str,
+        choices=["apa", "aca", "apa_aca"],
+        default=None,
+        help="Compute selected DBLP homograph projection",
     )
 
     args = parser.parse_args()
@@ -119,13 +126,14 @@ def main():
         else:
             print_homo_data_stats(data, name)
 
-        # DBLP-specific: APA homograph projection
-        if name == "DBLP" and args.apa:
+        # DBLP-specific homograph projection
+        dblp_metapath = args.dblp_metapath or ("apa" if args.apa else None)
+        if name == "DBLP" and dblp_metapath:
             print("\n" + "-" * 40)
-            print("APA Meta-Path Homograph (Author-Paper-Author)")
+            print(f"{dblp_metapath.upper()} Meta-Path Homograph")
             print("-" * 40)
-            homograph = dataset.get_homograph_apa()
-            print_homo_data_stats(homograph, "DBLP-APA")
+            homograph = dataset.get_homograph(dblp_metapath)
+            print_homo_data_stats(homograph, f"DBLP-{dblp_metapath.upper()}")
             print(f"  Trainable nodes: {homograph.train_mask.sum().item() if hasattr(homograph, 'train_mask') and homograph.train_mask is not None else 'N/A'}")
             print(f"  Val nodes: {homograph.val_mask.sum().item() if hasattr(homograph, 'val_mask') and homograph.val_mask is not None else 'N/A'}")
             print(f"  Test nodes: {homograph.test_mask.sum().item() if hasattr(homograph, 'test_mask') and homograph.test_mask is not None else 'N/A'}")

@@ -75,6 +75,13 @@ def main():
         help="Data directory (default: ./data)",
     )
     parser.add_argument(
+        "--dblp-metapath",
+        type=str,
+        choices=["apa", "aca", "apa_aca"],
+        default="apa",
+        help="DBLP homograph projection",
+    )
+    parser.add_argument(
         "--epochs",
         type=int,
         default=100,
@@ -250,8 +257,8 @@ def main():
         dataset = AmazonPhotos(root=os.path.join(args.data_dir, "AmazonPhotos"))
     elif args.dataset == "dblp":
         dataset = DBLP(root=os.path.join(args.data_dir, "DBLP"))
-        print("Using DBLP APA homograph projection (Author-Paper-Author)")
-        data = dataset.get_homograph_apa()
+        print(f"Using DBLP {args.dblp_metapath.upper()} homograph projection")
+        data = dataset.get_homograph(args.dblp_metapath)
         # PyG's DBLP stores masks as 2D: [num_authors, num_splits].
         # Flatten to 1D by taking the first training split so the Trainer
         # can use them with standard boolean indexing.

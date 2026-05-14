@@ -42,6 +42,7 @@ def load_dataset(
     dataset_name: str,
     data_dir: str = "./data",
     email_features: Optional[Dict[str, bool]] = None,
+    dblp_metapath: str = "apa",
 ) -> Tuple[Any, Data]:
     """Load a dataset and return the dataset object and data."""
     if dataset_name == "amazon":
@@ -49,7 +50,7 @@ def load_dataset(
         data = dataset[0]
     elif dataset_name == "dblp":
         dataset = DBLP(root=os.path.join(data_dir, "DBLP"))
-        data = dataset.get_homograph_apa()
+        data = dataset.get_homograph(dblp_metapath)
         for mask_name in ("train_mask", "val_mask", "test_mask"):
             mask = getattr(data, mask_name, None)
             if mask is not None and mask.dim() == 2:
@@ -684,6 +685,13 @@ def main():
         default="./data",
         help="Data directory",
     )
+    parser.add_argument(
+        "--dblp-metapath",
+        type=str,
+        choices=["apa", "aca", "apa_aca"],
+        default="apa",
+        help="DBLP homograph projection",
+    )
 
     # Email feature flags (only used if email dataset is selected)
     parser.add_argument("--email-use-degree", action="store_true", default=False)
@@ -793,7 +801,7 @@ def main():
         print(f"{'='*60}")
 
         # Load dataset
-        _, data = load_dataset(dataset_name, args.data_dir, email_features)
+        _, data = load_dataset(dataset_name, args.data_dir, email_features, args.dblp_metapath)
         data = create_masks(data) if not hasattr(data, 'train_mask') else data
 
         # Get dataset statistics

@@ -53,6 +53,13 @@ def main():
         help="Model to use (default: gcn)",
     )
     parser.add_argument(
+        "--dblp-metapath",
+        type=str,
+        choices=["apa", "aca", "apa_aca"],
+        default="apa",
+        help="DBLP homograph projection",
+    )
+    parser.add_argument(
         "--data-dir",
         type=str,
         default="./data",
@@ -110,15 +117,13 @@ def main():
     # Load dataset
     if args.dataset == "amazon":
         dataset = AmazonPhotos(root=os.path.join(args.data_dir, "AmazonPhotos"))
+        data = dataset[0]
     elif args.dataset == "dblp":
         dataset = DBLP(root=os.path.join(args.data_dir, "DBLP"))
-        # Use APA homograph for DBLP
-        data = dataset.get_homograph_apa()
-        print("Using DBLP APA homograph projection")
+        data = dataset.get_homograph(args.dblp_metapath)
+        print(f"Using DBLP {args.dblp_metapath.upper()} homograph projection")
     else:
         raise ValueError(f"Unknown dataset: {args.dataset}")
-
-    data = dataset[0]
 
     print(f"Graph: {data.num_nodes} nodes, {data.edge_index.shape[1]} edges")
     num_classes = data.y.max().item() + 1

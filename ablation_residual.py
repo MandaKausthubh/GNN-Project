@@ -40,6 +40,7 @@ def benchmark_residual_vs_base(
     data_dir: str = "./data",
     models: Optional[List[str]] = None,
     datasets: Optional[List[str]] = None,
+    dblp_metapath: str = "apa",
     epochs: int = 100,
     n_runs: int = 3,
     device: Optional[str] = None,
@@ -99,7 +100,7 @@ def benchmark_residual_vs_base(
         print(f"Dataset: {dataset_name.upper()}")
         print(f"{'=' * 60}")
 
-        _, data = load_dataset(dataset_name, data_dir)
+        _, data = load_dataset(dataset_name, data_dir, dblp_metapath=dblp_metapath)
         data = create_masks(data) if not hasattr(data, "train_mask") else data
         stats = get_dataset_stats(data)
         if verbose:
@@ -251,6 +252,13 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["amazon", "dblp", "email"],
         help="Datasets to run on",
     )
+    parser.add_argument(
+        "--dblp-metapath",
+        type=str,
+        choices=["apa", "aca", "apa_aca"],
+        default="apa",
+        help="DBLP homograph projection",
+    )
     parser.add_argument("--epochs", type=int, default=100, help="Training epochs")
     parser.add_argument("--n-runs", type=int, default=3, help="Number of runs per config")
     parser.add_argument(
@@ -281,6 +289,7 @@ def main():
         data_dir=args.data_dir,
         models=args.models,
         datasets=args.datasets,
+        dblp_metapath=args.dblp_metapath,
         epochs=args.epochs,
         n_runs=args.n_runs,
         device=device,

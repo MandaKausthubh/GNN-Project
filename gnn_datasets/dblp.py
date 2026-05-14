@@ -53,89 +53,73 @@ class DBLP(SingleGraphWrapper):
             raise IndexError(f"Index {idx} out of range")
         return self._dataset[0]
 
-    def get_homograph_apa(self) -> Data:
-        """
-        Compute the Author-Paper-Author (APA) meta-path based projection.
-
-        Creates a homogeneous author-author graph where two authors are
-        connected if they co-authored at least one paper.
-
-        Returns:
-            Data object with:
-                - x: Author node features (334-dim)
-                - edge_index: Author-author edges
-                - y: Author labels (research area, 4 classes)
-                - train_mask, val_mask, test_mask: Split masks
-        """
+    def _require_hetero_data(self) -> HeteroData:
+        """Return DBLP graph as HeteroData."""
         data = self._dataset[0]
-
         if not isinstance(data, HeteroData):
             raise ValueError("DBLP data is not HeteroData")
+        return data
 
-        # Extract author-paper edges
-        author_paper_edge = data['author', 'to', 'paper'].edge_index
-        authors = author_paper_edge[0]
-        papers = author_paper_edge[1]
+    @staticmethod
+    def _get_edge_index(data: HeteroData, src_type: str, dst_type: str) -> torch.Tensor:
+        """Get edge_index between node types, accepting reverse edge direction."""
+        for edge_type in data.edge_types:
+            src, _, dst = edge_type
+            edge_index = data[edge_type].edge_index
+            if src == src_type and dst == dst_type:
+                return edge_index
+            if src == dst_type and dst == src_type:
+                return edge_index.flip(0)
+        raise ValueError(f"DBLP edge type {src_type}->{dst_type} not found")
 
-        num_authors = data['author'].num_nodes
-        num_papers = data['paper'].num_nodes
+    @staticmethod
+    def _project_authors_by_group(
+        data: HeteroData,
+        authors: torch.Tensor,
+        group_ids: torch.Tensor,
+    ) -> Data:
+        """Create author-author graph by connecting authors sharing a group ID."""
+        device = authors.device
 
-        # For each paper, collect all authors who wrote it
-        # Then create author-author edges for each pair
-        # Using scatter to group author indices by paper
+        # Sort by group ID to collect authors per paper/conference.
+        sorted_group_ids, group_order = group_ids.sort()
+        sorted_authors = authors[group_order]
 
-        # Sort by paper ID to group authors by paper
-        sorted_paper_ids, paper_order = papers.sort()
-        sorted_authors = authors[paper_order]
-
-        # Find boundaries between papers
-        paper_diff = torch.cat([
-            torch.tensor([0], device=papers.device),
-            (sorted_paper_ids[1:] != sorted_paper_ids[:-1]).nonzero(as_tuple=True)[0] + 1,
-            torch.tensor([sorted_paper_ids.size(0)], device=papers.device)
+        group_diff = torch.cat([
+            torch.tensor([0], device=device),
+            (sorted_group_ids[1:] != sorted_group_ids[:-1]).nonzero(as_tuple=True)[0] + 1,
+            torch.tensor([sorted_group_ids.size(0)], device=device),
         ])
 
-        # Create author-author edges from co-authorship
         src_authors = []
         dst_authors = []
 
-        for i in range(len(paper_diff) - 1):
-            start, end = paper_diff[i], paper_diff[i + 1]
-            paper_authors = sorted_authors[start:end]
+        for i in range(len(group_diff) - 1):
+            start, end = group_diff[i], group_diff[i + 1]
+            group_authors = torch.unique(sorted_authors[start:end])
 
-            # Create edges between all pairs of co-authors
-            num_coauthors = paper_authors.size(0)
+            num_coauthors = group_authors.size(0)
             if num_coauthors > 1:
-                # Add all pairs (will dedupe later)
                 for j in range(num_coauthors):
                     for k in range(j + 1, num_coauthors):
-                        src_authors.append(paper_authors[j].item())
-                        dst_authors.append(paper_authors[k].item())
+                        src_authors.append(group_authors[j].item())
+                        dst_authors.append(group_authors[k].item())
 
         if not src_authors:
-            # No co-authorships found (unlikely case)
-            edge_index = torch.zeros((2, 0), dtype=torch.long)
+            edge_index = torch.zeros((2, 0), dtype=torch.long, device=device)
         else:
-            edge_index = torch.tensor([src_authors, dst_authors], dtype=torch.long)
-
-            # Make undirected
+            edge_index = torch.tensor([src_authors, dst_authors], dtype=torch.long, device=device)
             edge_index = to_undirected(edge_index)
-
-            # Remove self-loops
             mask = edge_index[0] != edge_index[1]
             edge_index = edge_index[:, mask]
-
-            # Remove duplicate edges
             edge_index = torch.unique(edge_index, dim=1)
 
-        # Create Data object
         proj_data = Data(
             x=data['author'].x,
             edge_index=edge_index,
             y=data['author'].y,
         )
 
-        # Add masks if available
         if hasattr(data['author'], 'train_mask'):
             proj_data.train_mask = data['author'].train_mask
         if hasattr(data['author'], 'val_mask'):
@@ -144,3 +128,83 @@ class DBLP(SingleGraphWrapper):
             proj_data.test_mask = data['author'].test_mask
 
         return proj_data
+
+    def get_homograph_apa(self) -> Data:
+        """
+        Compute Author-Paper-Author (APA) meta-path projection.
+
+        Authors are connected when they co-authored at least one paper.
+        """
+        data = self._require_hetero_data()
+        author_paper_edge = self._get_edge_index(data, 'author', 'paper')
+        return self._project_authors_by_group(
+            data=data,
+            authors=author_paper_edge[0],
+            group_ids=author_paper_edge[1],
+        )
+
+    def get_homograph_aca(self) -> Data:
+        """
+        Compute Author-Conference-Author (ACA) meta-path projection.
+
+        Authors are connected when they published in at least one same conference.
+        """
+        data = self._require_hetero_data()
+        author_paper_edge = self._get_edge_index(data, 'author', 'paper')
+        paper_conference_edge = self._get_edge_index(data, 'paper', 'conference')
+
+        authors = author_paper_edge[0]
+        papers = author_paper_edge[1]
+        paper_ids = paper_conference_edge[0]
+        conference_ids = paper_conference_edge[1]
+
+        paper_to_conference = torch.full(
+            (data['paper'].num_nodes,),
+            -1,
+            dtype=torch.long,
+            device=papers.device,
+        )
+        paper_to_conference[paper_ids.to(papers.device)] = conference_ids.to(papers.device)
+        author_conferences = paper_to_conference[papers]
+        valid_mask = author_conferences >= 0
+
+        return self._project_authors_by_group(
+            data=data,
+            authors=authors[valid_mask],
+            group_ids=author_conferences[valid_mask],
+        )
+
+    def get_homograph_apa_aca(self) -> Data:
+        """
+        Compute combined APA + ACA author projection.
+
+        Edges are union of shared-paper and shared-conference author links.
+        """
+        apa_data = self.get_homograph_apa()
+        aca_data = self.get_homograph_aca()
+        edge_index = torch.cat([apa_data.edge_index, aca_data.edge_index], dim=1)
+        edge_index = torch.unique(edge_index, dim=1)
+        apa_data.edge_index = edge_index
+        return apa_data
+
+    def get_homograph(self, metapath: str = "apa") -> Data:
+        """Return DBLP author homograph for selected meta-path."""
+        if metapath == "apa":
+            return self.get_homograph_apa()
+        if metapath == "aca":
+            return self.get_homograph_aca()
+        if metapath in {"apa_aca", "both"}:
+            return self.get_homograph_apa_aca()
+        raise ValueError(f"Unknown DBLP meta-path: {metapath}")
+
+    def aca(self) -> Data:
+        """Alias for get_homograph_aca."""
+        return self.get_homograph_aca()
+
+    def apa(self) -> Data:
+        """Alias for get_homograph_apa."""
+        return self.get_homograph_apa()
+
+    def apa_aca(self) -> Data:
+        """Alias for get_homograph_apa_aca."""
+        return self.get_homograph_apa_aca()

@@ -113,11 +113,11 @@ def load_dataset(name, args):
 
     if 'dblp' == name:
         dataset = DBLP(root=os.path.join(args.data_dir, "DBLP"))
-        data = dataset.get_homograph_apa()
+        data = dataset.get_homograph(getattr(args, "dblp_metapath", "apa"))
         for mask_name in ['train_mask', 'val_mask', 'test_mask']:
-            mask = getattr(dataset, mask_name, None)
+            mask = getattr(data, mask_name, None)
             if mask is not None and mask.dim() == 2:
-                setattr(dataset, mask_name, mask[:, 0])
+                setattr(data, mask_name, mask[:, 0])
         return dataset, data
 
     if 'email' == name:
@@ -160,9 +160,10 @@ def create_masks(
     val_ratio: float = 0.2,
     seed: int = 42,
     device: Optional[torch.device] = None,
+    force_recreate: bool = False,
 ) -> Data:
     """Create train/val/test masks if they don't exist."""
-    if hasattr(data, 'train_mask') and data.train_mask is not None:
+    if hasattr(data, 'train_mask') and data.train_mask is not None and not force_recreate:
         return data
 
     num_nodes = data.num_nodes
@@ -244,13 +245,14 @@ def train_single_model_dataset_config(
     device: torch.device = torch.device("cpu"),
     args: Optional[argparse.Namespace] = None,
     verbose: bool = False,
+    seed: int = 42,
 ) -> Tuple[Dict[str, List[float]], Dict[str, float], nn.Module]:
     """Train a single model on a single dataset configuration."""
     _, data = load_dataset(dataset_name, args)
 
     assert data is not None, "Data cannot be None"
     data = data.to(device)
-    data = create_masks(data, device=device)
+    data = create_masks(data, device=device, force_recreate=True, seed=seed)
     assert hasattr(data, 'train_mask') and data.train_mask is not None, "train_mask must be created"
 
     if verbose:
@@ -313,6 +315,7 @@ def hyperparameter_search(
     verbose: bool = False,
     args: Optional[argparse.Namespace] = None,
     early_stopping_patience: int = 20,
+    seed: int = 42,
 ) -> Tuple[Dict[str, Any], Dict[str, float], Dict[str, List[float]]]:
     """
     Perform hyperparameter search.
@@ -406,7 +409,8 @@ def hyperparameter_search(
                 epochs=epochs,
                 device=device,   # type: ignore
                 verbose=True,
-                args=args
+                args=args,
+                seed=seed,
             )
 
             val_score = val_metrics.get(val_metric, 0)
@@ -436,7 +440,8 @@ def hyperparameter_search(
                     epochs=epochs,
                     device=device,   # type: ignore
                     verbose=True,
-                    args=args
+                    args=args,
+                    seed=seed,
                 )
 
                 # pbar.set_postfix_str(f"Cfg-{i+1}: {config_str} | {val_metric}={val_score:.4f} (BEST)")
@@ -482,6 +487,7 @@ def run_baseline_evaluations_on_dataset(
     epochs: int = 100,
     device: torch.device = torch.device("cpu"),
     args: Optional[argparse.Namespace] = None,
+    seed: int = 42,
 ) -> Dict[str, Dict[str, float]]:
     """Run baseline evaluations for multiple models on a dataset."""
     results = {}
@@ -642,6 +648,13 @@ def main():
     # parser.add_argument("--dataset", type=str, choices=["amazon", "dblp", "email"], default="email", help="Dataset to use")
     parser.add_argument("--datasets", type=str, nargs="+", default=["email"], help="List of datasets to use")
     parser.add_argument("--data-dir", type=str, default="./data", help="Data directory",)
+    parser.add_argument(
+        "--dblp-metapath",
+        type=str,
+        choices=["apa", "aca", "apa_aca"],
+        default="apa",
+        help="DBLP homograph projection",
+    )
 
     # Email feature flags
     parser.add_argument("--email-use-degree", action="store_true", default=False)

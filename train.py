@@ -120,6 +120,7 @@ def load_dataset(
     dataset_name: str,
     data_dir: str = "./data",
     email_features: Optional[Dict[str, bool]] = None,
+    dblp_metapath: str = "apa",
 ) -> Tuple[Any, Data]:
     """
     Load a dataset and return the dataset object and data.
@@ -128,6 +129,7 @@ def load_dataset(
         dataset_name: Name of the dataset ("amazon", "dblp", "email").
         data_dir: Root directory for data.
         email_features: Dictionary of feature flags for Email-Eu-Core.
+        dblp_metapath: DBLP homograph projection ("apa", "aca", or "apa_aca").
 
     Returns:
         Tuple of (dataset, data).
@@ -137,7 +139,7 @@ def load_dataset(
         data = dataset[0]
     elif dataset_name == "dblp":
         dataset = DBLP(root=os.path.join(data_dir, "DBLP"))
-        data = dataset.get_homograph_apa()
+        data = dataset.get_homograph(dblp_metapath)
         # Flatten 2D masks to 1D
         for mask_name in ("train_mask", "val_mask", "test_mask"):
             mask = getattr(data, mask_name, None)
@@ -830,6 +832,7 @@ def benchmark_all_datasets(
     save_curves: bool = False,
     save_tsne: bool = False,
     save_time_plots: bool = False,
+    dblp_metapath: str = "apa",
 ) -> Dict[str, Any]:
     """
     Benchmark all models across all datasets with optional hyperparameter tuning.
@@ -862,7 +865,7 @@ def benchmark_all_datasets(
 
     for dataset_idx, dataset_name in enumerate(datasets):
         # Load dataset
-        _, data = load_dataset(dataset_name, data_dir)
+        _, data = load_dataset(dataset_name, data_dir, dblp_metapath=dblp_metapath)
         data = create_masks(data) if not hasattr(data, 'train_mask') else data
 
         # Get dataset statistics
@@ -1222,6 +1225,13 @@ def main():
         default="./data",
         help="Data directory",
     )
+    parser.add_argument(
+        "--dblp-metapath",
+        type=str,
+        choices=["apa", "aca", "apa_aca"],
+        default="apa",
+        help="DBLP homograph projection",
+    )
 
     # Email feature flags
     parser.add_argument("--email-use-degree", action="store_true", default=False)
@@ -1360,7 +1370,7 @@ def main():
         # Single training run
         print(f"\nTraining {args.model} on {args.dataset}")
 
-        _, data = load_dataset(args.dataset, args.data_dir, email_features)
+        _, data = load_dataset(args.dataset, args.data_dir, email_features, args.dblp_metapath)
         data = create_masks(data) if not hasattr(data, 'train_mask') else data
 
         history, test_metrics, model = train_single_config(
@@ -1410,7 +1420,7 @@ def main():
         print(f"\nHyperparameter search for {args.model} on {args.dataset}")
         print(f"Search type: {args.search_type}, Trials: {args.n_trials}")
 
-        _, data = load_dataset(args.dataset, args.data_dir, email_features)
+        _, data = load_dataset(args.dataset, args.data_dir, email_features, args.dblp_metapath)
         data = create_masks(data) if not hasattr(data, 'train_mask') else data
 
         best_config, best_metrics, all_results = hyperparameter_search(
@@ -1469,7 +1479,7 @@ def main():
         print(f"\nBenchmarking on {args.dataset}")
         models = args.models or ["gcn", "gat", "sage", "ppnp", "appnp"]
 
-        _, data = load_dataset(args.dataset, args.data_dir, email_features)
+        _, data = load_dataset(args.dataset, args.data_dir, email_features, args.dblp_metapath)
         data = create_masks(data) if not hasattr(data, 'train_mask') else data
 
         results = benchmark_all_models(
@@ -1529,6 +1539,7 @@ def main():
             save_curves=args.save_learning_curves,
             save_tsne=args.save_tsne_plots,
             save_time_plots=args.save_training_time_plots,
+            dblp_metapath=args.dblp_metapath,
         )
         # Final results already printed in benchmark_all_datasets
 
@@ -1540,7 +1551,7 @@ def main():
         )
         models = args.models or ["gcn", "gat", "sage", "ppnp", "appnp"]
 
-        _, data = load_dataset(args.dataset, args.data_dir, email_features)
+        _, data = load_dataset(args.dataset, args.data_dir, email_features, args.dblp_metapath)
         data = create_masks(data) if not hasattr(data, 'train_mask') else data
 
         results = tune_then_benchmark_models(

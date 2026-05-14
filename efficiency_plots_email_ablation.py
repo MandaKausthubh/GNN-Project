@@ -113,11 +113,11 @@ def load_dataset(name, args):
 
     if 'dblp' == name:
         dataset = DBLP(root=os.path.join(args.data_dir, "DBLP"))
-        data = dataset.get_homograph_apa()
+        data = dataset.get_homograph(getattr(args, "dblp_metapath", "apa"))
         for mask_name in ['train_mask', 'val_mask', 'test_mask']:
-            mask = getattr(dataset, mask_name, None)
+            mask = getattr(data, mask_name, None)
             if mask is not None and mask.dim() == 2:
-                setattr(dataset, mask_name, mask[:, 0])
+                setattr(data, mask_name, mask[:, 0])
         return dataset, data
 
     if 'email' == name:
@@ -791,6 +791,13 @@ def main():
     # parser.add_argument("--dataset", type=str, choices=["amazon", "dblp", "email"], default="email", help="Dataset to use")
     parser.add_argument("--datasets", type=str, nargs="+", default=["email"], help="List of datasets to use")
     parser.add_argument("--data-dir", type=str, default="./data", help="Data directory",)
+    parser.add_argument(
+        "--dblp-metapath",
+        type=str,
+        choices=["apa", "aca", "apa_aca"],
+        default="apa",
+        help="DBLP homograph projection",
+    )
 
     # Email feature flags
     parser.add_argument("--email-use-degree", action="store_true", default=False)
